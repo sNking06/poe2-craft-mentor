@@ -19,6 +19,7 @@ Guider les joueurs debutants et avances pour:
 - Historique local
 - Favoris
 - Guide rapide anti-erreurs
+- Analyse economie integree (PoE2DB Economy US: segments, tendance 7j, volume, estimation cout craft)
 
 ## Nouveautes V1.1 ✨
 ### Corrections de bugs
@@ -77,6 +78,11 @@ Le repo contient deja le workflow:
 - `.github/workflows/pages.yml`
 
 A chaque push sur `main`, le site est deploye via GitHub Actions.
+
+## Donnees economie
+- Source: `https://poe2db.tw/Economy` (realm US)
+- Snapshot integre dans l'app: `2026-02-06`
+- Note: les prix evoluent vite, mettre a jour regulierement la table eco dans `frontend/app.js`.
 
 ## URL repo
 - `https://github.com/sNking06/poe2-craft-mentor`

@@ -1,17 +1,49 @@
-﻿// =======================
-// CONFIGURATION & CONSTANTS
-// =======================
-
-const STORAGE_HISTORY = "poe2_craft_history_v2";
+﻿const STORAGE_HISTORY = "poe2_craft_history_v2";
 const STORAGE_FAVORITES = "poe2_craft_favorites_v2";
-const MAX_HISTORY_ITEMS = 20;
-const MAX_FAVORITE_ITEMS = 20;
 
-// Score thresholds for visual feedback
-const SCORE_LOW = 35;
-const SCORE_MEDIUM = 65;
+const ECON_SOURCE = {
+  provider: "PoE2DB Economy",
+  realm: "US",
+  date: "2026-02-06",
+  url: "https://poe2db.tw/Economy"
+};
 
-// DOM Elements
+const SEGMENT_NOTES = {
+  Currency: "Base du craft: liquidite forte, reference prix globale.",
+  Fragments: "Utile si ton plan repose sur du farm ciblant boss/maps.",
+  Ritual: "Peut ouvrir des alternatives low-cost selon l'offre du moment.",
+  Essences: "Excellent pour du craft semi-deterministe a budget controle.",
+  Breach: "Segment plus volatil, interessant pour opportunites ponctuelles.",
+  Delirium: "Souvent rentable pour composants specs et scaling endgame.",
+  Expedition: "Bon levier pour acquisition de devises/craft mats.",
+  Runes: "Segment niche, verifier volume avant gros investissement.",
+  "Soul Cores": "Niche et volatil: garder une taille de position limitee.",
+  Idols: "Marche opportuniste, utile surtout en optimisation fine.",
+  "Uncut Gems": "Impact direct build power, arbitrage entre craft et achat.",
+  Abyss: "Peut fournir des options cout-efficaces selon meta.",
+  Gems: "Comparer cout craft vs achat direct est souvent gagnant.",
+  Incursion: "Segment situationnel, verifier profondeur du marche."
+};
+
+const ECON = {
+  "Divine Orb": { chaos: 42.4, trend7d: -2, volume24h: 528762 },
+  "Chaos Orb": { chaos: 1, trend7d: 2, volume24h: 22396893 },
+  "Exalted Orb": { chaos: 0.12, trend7d: -9, volume24h: 2764512 },
+  "Orb of Alchemy": { chaos: 0.1, trend7d: 11, volume24h: 5750684 },
+  "Regal Orb": { chaos: 0.1, trend7d: 11, volume24h: 4118094 },
+  "Orb of Annulment": { chaos: 1, trend7d: -2, volume24h: 364443 },
+  "Vaal Orb": { chaos: 1, trend7d: 6, volume24h: 496723 },
+  "Gemcutter's Prism": { chaos: 1, trend7d: -20, volume24h: 1393253 },
+  "Artificer's Orb": { chaos: 1, trend7d: 10, volume24h: 654993 },
+  "Greater Exalted Orb": { chaos: 1, trend7d: -17, volume24h: 211080 },
+  "Greater Regal Orb": { chaos: 1.33, trend7d: 13, volume24h: 469055 },
+  "Lesser Jeweller's Orb": { chaos: 0.1, trend7d: -5, volume24h: 2972274 },
+  "Greater Jeweller's Orb": { chaos: 0.1, trend7d: -5, volume24h: 2367689 },
+  "Perfect Jeweller's Orb": { chaos: 1, trend7d: -15, volume24h: 423728 },
+  "Fracturing Orb": { chaos: 34, trend7d: 36, volume24h: 100578 },
+  "Mirror of Kalandra": { chaos: 9558, trend7d: 1, volume24h: 327 }
+};
+
 const form = document.getElementById("craft-form");
 const resultat = document.getElementById("resultat");
 const historique = document.getElementById("historique");
@@ -21,9 +53,6 @@ const feedback = document.getElementById("feedback");
 
 const saveFavoriteButton = document.getElementById("save-favorite");
 const copyPlanButton = document.getElementById("copy-plan");
-const exportPlanButton = document.getElementById("export-plan");
-const importPlanButton = document.getElementById("import-plan");
-const importFileInput = document.getElementById("import-file");
 const clearHistoryButton = document.getElementById("clear-history");
 const clearFavoritesButton = document.getElementById("clear-favorites");
 
@@ -69,53 +98,20 @@ const slotDefensiveMods = {
   arme: ["Defense Through Offense", "Sustain Utility", "Crit/Leech Utility", "Speed", "Optional Resist"]
 };
 
-/**
- * Display feedback message to user
- * @param {string} message - Message to display
- * @param {string} type - Message type: 'success', 'error', 'info'
- */
-function setFeedback(message, type = 'info') {
+function setFeedback(message) {
   feedback.textContent = message;
-  feedback.className = 'feedback';
-  if (type === 'error') feedback.classList.add('feedback-error');
-  if (type === 'success') feedback.classList.add('feedback-success');
 }
 
-/**
- * Read JSON data from localStorage with error handling
- * @param {string} key - Storage key
- * @returns {Array} Parsed data or empty array on error
- */
 function readJson(key) {
   try {
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
-  } catch (error) {
-    console.error(`Error reading ${key} from localStorage:`, error);
-    setFeedback("Erreur de lecture du stockage local", "error");
+    return JSON.parse(localStorage.getItem(key) || "[]");
+  } catch {
     return [];
   }
 }
 
-/**
- * Write JSON data to localStorage with error handling
- * @param {string} key - Storage key
- * @param {any} value - Data to store
- * @returns {boolean} Success status
- */
 function writeJson(key, value) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch (error) {
-    console.error(`Error writing ${key} to localStorage:`, error);
-    if (error.name === 'QuotaExceededError') {
-      setFeedback("Stockage local plein. Videz l'historique.", "error");
-    } else {
-      setFeedback("Erreur de sauvegarde", "error");
-    }
-    return false;
-  }
+  localStorage.setItem(key, JSON.stringify(value));
 }
 
 function getRiskFactor(risk) {
@@ -164,89 +160,97 @@ function buildSteps(data) {
   return steps;
 }
 
-/**
- * Compute scores for a craft plan
- *
- * Power Score (0-100): Indicates potential strength of the craft
- * - Higher budget = more power (logarithmic scaling)
- * - More priorities = more power
- * - Higher stage (endgame) = more power
- * - Higher complexity = less power
- *
- * Risk Score (0-100): Indicates chance of failure/bricking
- * - Higher complexity = more risk
- * - More aggressive risk tolerance = more risk
- * - Beginner mode = lower risk (safer recommendations)
- *
- * Cost Pressure (0-100): Indicates budget strain
- * - Higher complexity = more pressure
- * - Higher risk tolerance = more pressure
- * - Higher stage = more pressure
- * - Higher budget = less pressure
- *
- * @param {Object} data - Craft parameters
- * @param {Array} priorities - List of priority mods
- * @returns {Object} {power, riskScore, costPressure}
- */
 function computeScores(data, priorities) {
   const budget = Number(data.budgetDiv);
   const complexity = slotComplexity[data.slot] * (data.objectif === "degats" ? 1.2 : 1);
   const stage = getStageFactor(data.stade);
   const risk = getRiskFactor(data.risque);
 
-  // Power: base 35, logarithmic budget scaling, priorities bonus, stage bonus, complexity penalty
   const budgetPower = Math.min(100, 35 + Math.log10(budget + 1) * 28);
-  const power = Math.round(
-    Math.max(10, Math.min(100,
-      budgetPower + priorities.length * 4 + stage * 10 - complexity * 8
-    ))
-  );
-
-  // Risk: base 35, scaled by complexity and risk tolerance, beginner mode reduction
-  const riskScore = Math.round(
-    Math.max(5, Math.min(100,
-      35 + risk * complexity * 22 - (data.mode === "debutant" ? 8 : 0)
-    ))
-  );
-
-  // Cost Pressure: base 25, complexity penalty, risk penalty, stage penalty, budget relief (max 25)
-  const costPressure = Math.round(
-    Math.max(5, Math.min(100,
-      25 + complexity * 22 + risk * 12 + stage * 8 - Math.min(25, budget * 0.5)
-    ))
-  );
+  const power = Math.round(Math.max(10, Math.min(100, budgetPower + priorities.length * 4 + stage * 10 - complexity * 8)));
+  const riskScore = Math.round(Math.max(5, Math.min(100, 35 + risk * complexity * 22 - (data.mode === "debutant" ? 8 : 0))));
+  const costPressure = Math.round(Math.max(5, Math.min(100, 25 + complexity * 22 + risk * 12 + stage * 8 - Math.min(25, budget * 0.5))));
 
   return { power, riskScore, costPressure };
 }
 
-/**
- * Get CSS class for score value
- * @param {number} value - Score value (0-100)
- * @returns {string} CSS class name
- */
 function scoreClass(value) {
-  if (value <= SCORE_LOW) return "score-ok";
-  if (value <= SCORE_MEDIUM) return "score-mid";
+  if (value <= 35) return "score-ok";
+  if (value <= 65) return "score-mid";
   return "score-bad";
-}
-
-/**
- * Switch to a different tab
- * @param {string} tabName - Tab name to switch to
- */
-function switchTab(tabName) {
-  document.querySelectorAll(".tab").forEach((tab) => tab.classList.remove("is-active"));
-  document.querySelectorAll(".view").forEach((view) => view.classList.remove("is-active"));
-
-  const tabButton = document.querySelector(`[data-tab="${tabName}"]`);
-  const targetView = document.getElementById(`view-${tabName}`);
-
-  if (tabButton) tabButton.classList.add("is-active");
-  if (targetView) targetView.classList.add("is-active");
 }
 
 function formatTitle(data) {
   return `${data.slot} | ${data.objectif} | ${data.damageType} | ${data.budgetDiv} div`;
+}
+
+function buildCurrencyBasket(data) {
+  const basket = [
+    { name: "Chaos Orb", units: 40 },
+    { name: "Orb of Annulment", units: 2 },
+    { name: "Regal Orb", units: 20 },
+    { name: "Exalted Orb", units: 40 },
+    { name: "Orb of Alchemy", units: 30 }
+  ];
+
+  if (data.objectif === "degats") {
+    basket.push({ name: "Vaal Orb", units: 15 });
+    basket.push({ name: "Gemcutter's Prism", units: 12 });
+  }
+  if (data.objectif === "survie") basket.push({ name: "Artificer's Orb", units: 12 });
+  if (data.objectif === "mobilite") basket.push({ name: "Greater Regal Orb", units: 6 });
+  if (data.risque === "agressif") basket.push({ name: "Fracturing Orb", units: 1 });
+  if (data.mode === "debutant") return basket.filter((c) => c.name !== "Fracturing Orb");
+
+  return basket;
+}
+
+function buildEconomyInsight(data) {
+  const divChaos = ECON["Divine Orb"].chaos;
+  const basket = buildCurrencyBasket(data);
+  const complexity = slotComplexity[data.slot];
+  const stageFactor = getStageFactor(data.stade);
+
+  const adjusted = basket.map((item) => {
+    const econ = ECON[item.name];
+    const units = Math.max(1, Math.round(item.units * complexity * stageFactor * 0.35));
+    const chaosCost = econ ? units * econ.chaos : 0;
+    return {
+      name: item.name,
+      units,
+      chaosCost,
+      trend7d: econ ? econ.trend7d : 0,
+      volume24h: econ ? econ.volume24h : 0
+    };
+  });
+
+  const totalChaos = adjusted.reduce((sum, item) => sum + item.chaosCost, 0);
+  const totalDiv = totalChaos / divChaos;
+
+  const weightedTrend = adjusted.reduce((sum, item) => sum + item.trend7d * (item.chaosCost || 1), 0) / Math.max(1, totalChaos);
+  const weightedVolume = adjusted.reduce((sum, item) => sum + item.volume24h, 0) / Math.max(1, adjusted.length);
+
+  const buyNow = adjusted.filter((item) => item.trend7d <= -10).map((item) => item.name);
+  const expensiveNow = adjusted.filter((item) => item.trend7d >= 10).map((item) => item.name);
+  const lowLiquidity = adjusted.filter((item) => item.volume24h < 150000).map((item) => item.name);
+
+  const budgetDiv = Number(data.budgetDiv);
+  const budgetStatus = budgetDiv >= totalDiv ? "ok" : "short";
+
+  return {
+    segment: data.segment,
+    segmentNote: SEGMENT_NOTES[data.segment],
+    source: ECON_SOURCE,
+    basket: adjusted,
+    totalChaos,
+    totalDiv,
+    weightedTrend,
+    weightedVolume,
+    buyNow,
+    expensiveNow,
+    lowLiquidity,
+    budgetStatus
+  };
 }
 
 function planToText(plan) {
@@ -254,14 +258,26 @@ function planToText(plan) {
   const priorities = plan.priorities.map((m, i) => `P${i + 1}: ${m}`).join("\n");
   const checklist = plan.checklist.map((c) => `- ${c}`).join("\n");
   const steps = plan.steps.map((s) => `- ${s}`).join("\n");
+  const eco = `Cout estime: ${plan.economy.totalChaos.toFixed(1)} chaos (${plan.economy.totalDiv.toFixed(2)} div) | Segment: ${plan.economy.segment}`;
 
-  return `${header}\n\nChecklist:\n${checklist}\n\nPriorites:\n${priorities}\n\nPlan:\n${steps}`;
+  return `${header}\n\n${eco}\n\nChecklist:\n${checklist}\n\nPriorites:\n${priorities}\n\nPlan:\n${steps}`;
 }
 
 function renderPlan(plan) {
   const priorities = plan.priorities.map((mod, i) => `<li>P${i + 1} - ${mod}</li>`).join("");
   const checklist = plan.checklist.map((item) => `<li>${item}</li>`).join("");
   const steps = plan.steps.map((step) => `<li>${step}</li>`).join("");
+  const ecoRows = plan.economy.basket
+    .map((item) => `<li>${item.name}: ${item.units}u (~${item.chaosCost.toFixed(1)} chaos, trend 7j ${item.trend7d > 0 ? "+" : ""}${item.trend7d}%)</li>`)
+    .join("");
+
+  const budgetChip = plan.economy.budgetStatus === "ok"
+    ? `<span class="tag">Budget suffisant</span>`
+    : `<span class="tag">Budget insuffisant</span>`;
+
+  const buyNowText = plan.economy.buyNow.length ? plan.economy.buyNow.join(", ") : "Aucun signal fort";
+  const expensiveText = plan.economy.expensiveNow.length ? plan.economy.expensiveNow.join(", ") : "Aucun signal fort";
+  const liquidityText = plan.economy.lowLiquidity.length ? plan.economy.lowLiquidity.join(", ") : "Liquidite correcte";
 
   resultat.innerHTML = `
     <div class="card">
@@ -269,12 +285,25 @@ function renderPlan(plan) {
       <p class="tag">${plan.data.slot}</p>
       <p class="tag">${plan.data.objectif}</p>
       <p class="tag">${plan.data.damageType}</p>
+      <p class="tag">${plan.data.segment}</p>
+      ${budgetChip}
       <p><strong>Build:</strong> ${plan.data.build || "non precise"} | <strong>Budget:</strong> ${plan.data.budgetDiv} div | <strong>ilvl:</strong> ${plan.data.ilvl}</p>
       <div class="kpi">
         <span>Puissance: <strong>${plan.scores.power}/100</strong></span>
         <span class="${scoreClass(plan.scores.riskScore)}">Risque: <strong>${plan.scores.riskScore}/100</strong></span>
         <span class="${scoreClass(plan.scores.costPressure)}">Pression cout: <strong>${plan.scores.costPressure}/100</strong></span>
       </div>
+    </div>
+    <div class="card">
+      <h3>Analyse economie (${plan.economy.source.provider} ${plan.economy.source.realm})</h3>
+      <p><strong>Snapshot:</strong> ${plan.economy.source.date} | <a href="${plan.economy.source.url}" target="_blank" rel="noreferrer">source</a></p>
+      <p><strong>Segment:</strong> ${plan.economy.segment} - ${plan.economy.segmentNote}</p>
+      <p><strong>Cout craft estime:</strong> ${plan.economy.totalChaos.toFixed(1)} chaos (~${plan.economy.totalDiv.toFixed(2)} div)</p>
+      <p><strong>Trend panier (7j):</strong> ${plan.economy.weightedTrend > 0 ? "+" : ""}${plan.economy.weightedTrend.toFixed(1)}% | <strong>Volume moyen:</strong> ${Math.round(plan.economy.weightedVolume).toLocaleString("fr-FR")}/24h</p>
+      <ul>${ecoRows}</ul>
+      <p><strong>Opportunite achat:</strong> ${buyNowText}</p>
+      <p><strong>Surveille (prix en hausse):</strong> ${expensiveText}</p>
+      <p><strong>Risque liquidite:</strong> ${liquidityText}</p>
     </div>
     <div class="card">
       <h3>Checklist avant craft</h3>
@@ -291,46 +320,24 @@ function renderPlan(plan) {
   `;
 }
 
-/**
- * Render history list with interactive cards
- */
 function renderHistory() {
   const entries = readJson(STORAGE_HISTORY);
   if (!entries.length) {
-    historique.innerHTML = '<li class="empty-state">Aucun craft enregistré.</li>';
+    historique.innerHTML = "<li>Aucun craft enregistre.</li>";
     return;
   }
 
-  historique.innerHTML = entries.map((entry) => `
-    <li class="history-card">
-      <div class="history-card-content" onclick='restorePlan(${JSON.stringify(entry.plan).replace(/'/g, "&apos;")})'>
-        <strong>${entry.title}</strong>
-        <span class="date-label">${entry.date}</span>
-      </div>
-      <button class="btn-icon btn-delete" onclick='event.stopPropagation(); removeFromHistory("${entry.id}")' title="Supprimer">✕</button>
-    </li>
-  `).join("");
+  historique.innerHTML = entries.map((entry) => `<li><strong>${entry.title}</strong> - ${entry.date}</li>`).join("");
 }
 
-/**
- * Render favorites list with interactive cards
- */
 function renderFavorites() {
   const entries = readJson(STORAGE_FAVORITES);
   if (!entries.length) {
-    favoris.innerHTML = '<li class="empty-state">Aucun favori pour le moment.</li>';
+    favoris.innerHTML = "<li>Aucun favori pour le moment.</li>";
     return;
   }
 
-  favoris.innerHTML = entries.map((entry) => `
-    <li class="history-card">
-      <div class="history-card-content" onclick='restorePlan(${JSON.stringify(entry.plan).replace(/'/g, "&apos;")})'>
-        <strong>${entry.title}</strong>
-        <span class="date-label">${entry.date}</span>
-      </div>
-      <button class="btn-icon btn-delete" onclick='event.stopPropagation(); removeFromFavorites("${entry.id}")' title="Supprimer">✕</button>
-    </li>
-  `).join("");
+  favoris.innerHTML = entries.map((entry) => `<li><strong>${entry.title}</strong> - ${entry.date}</li>`).join("");
 }
 
 function renderGuide() {
@@ -346,124 +353,33 @@ function renderGuide() {
       </ul>
     </div>
     <div class="card">
-      <h3>Routine recommandee</h3>
+      <h3>Routine economie + craft</h3>
       <ul>
-        <li>1. Definir objectif, budget et niveau de risque.</li>
-        <li>2. Verrouiller priorites 1-2.</li>
-        <li>3. Evaluer le gain reel en gameplay.</li>
-        <li>4. Arreter si le ratio cout/gain devient mauvais.</li>
+        <li>1. Choisir le segment marche principal (Currency, Essences, etc.).</li>
+        <li>2. Verifier trend 7j et volume avant achat massif.</li>
+        <li>3. Construire le panier craft puis comparer au budget div.</li>
+        <li>4. Prioriser les devises en baisse et liquides.</li>
       </ul>
     </div>
   `;
 }
 
-/**
- * Generate a unique ID for a plan based on its data
- * @param {Object} data - Plan data
- * @returns {string} Unique identifier
- */
-function generatePlanId(data) {
-  return `${data.slot}_${data.objectif}_${data.damageType}_${data.budgetDiv}_${data.risque}`;
-}
-
-/**
- * Check if a plan is already in favorites
- * @param {Object} plan - Plan to check
- * @returns {boolean} True if plan exists in favorites
- */
-function isPlanInFavorites(plan) {
-  const favorites = readJson(STORAGE_FAVORITES);
-  const planId = generatePlanId(plan.data);
-  return favorites.some(fav => fav.id === planId);
-}
-
-/**
- * Store plan in history (auto-saves latest plans)
- * @param {Object} plan - Plan to store
- */
 function storeHistory(plan) {
-  const newEntry = {
-    id: generatePlanId(plan.data),
-    title: formatTitle(plan.data),
-    date: new Date().toLocaleString("fr-FR"),
-    plan: plan
-  };
+  const entries = [
+    { title: `${formatTitle(plan.data)} | ${plan.economy.totalDiv.toFixed(2)} div`, date: new Date().toLocaleString("fr-FR") },
+    ...readJson(STORAGE_HISTORY)
+  ].slice(0, 20);
 
-  const entries = [newEntry, ...readJson(STORAGE_HISTORY)].slice(0, MAX_HISTORY_ITEMS);
   writeJson(STORAGE_HISTORY, entries);
 }
 
-/**
- * Store plan in favorites (prevents duplicates)
- * @param {Object} plan - Plan to store
- * @returns {boolean} Success status
- */
 function storeFavorite(plan) {
-  const favorites = readJson(STORAGE_FAVORITES);
-  const planId = generatePlanId(plan.data);
+  const entries = [
+    { title: `${formatTitle(plan.data)} | ${plan.economy.totalDiv.toFixed(2)} div`, date: new Date().toLocaleString("fr-FR") },
+    ...readJson(STORAGE_FAVORITES)
+  ].slice(0, 20);
 
-  // Check for duplicates
-  if (favorites.some(fav => fav.id === planId)) {
-    setFeedback("Ce plan est déjà dans les favoris", "info");
-    return false;
-  }
-
-  const newEntry = {
-    id: planId,
-    title: formatTitle(plan.data),
-    date: new Date().toLocaleString("fr-FR"),
-    plan: plan
-  };
-
-  const entries = [newEntry, ...favorites].slice(0, MAX_FAVORITE_ITEMS);
-  const success = writeJson(STORAGE_FAVORITES, entries);
-
-  if (success) {
-    setFeedback("Plan ajouté aux favoris", "success");
-    return true;
-  }
-  return false;
-}
-
-/**
- * Remove a single item from history
- * @param {string} id - Item ID to remove
- */
-function removeFromHistory(id) {
-  const entries = readJson(STORAGE_HISTORY).filter(entry => entry.id !== id);
-  writeJson(STORAGE_HISTORY, entries);
-  renderHistory();
-  setFeedback("Item supprimé de l'historique", "success");
-}
-
-/**
- * Remove a single item from favorites
- * @param {string} id - Item ID to remove
- */
-function removeFromFavorites(id) {
-  const entries = readJson(STORAGE_FAVORITES).filter(entry => entry.id !== id);
   writeJson(STORAGE_FAVORITES, entries);
-  renderFavorites();
-  setFeedback("Item supprimé des favoris", "success");
-}
-
-/**
- * Restore a plan from history or favorites
- * @param {Object} plan - Plan to restore
- */
-function restorePlan(plan) {
-  latestPlan = plan;
-  renderPlan(plan);
-
-  // Populate form with plan data
-  Object.entries(plan.data).forEach(([key, value]) => {
-    const input = form.elements[key];
-    if (input) input.value = value;
-  });
-
-  // Switch to assistant tab
-  switchTab('assistant');
-  setFeedback("Plan restauré", "success");
 }
 
 function buildPlan(data) {
@@ -471,199 +387,59 @@ function buildPlan(data) {
   const checklist = buildChecklist(data);
   const steps = buildSteps(data);
   const scores = computeScores(data, priorities);
+  const economy = buildEconomyInsight(data);
 
-  return { data, priorities, checklist, steps, scores };
-}
-
-/**
- * Validate form data
- * @param {Object} data - Form data to validate
- * @returns {Object} Validation result {valid: boolean, errors: string[]}
- */
-function validateFormData(data) {
-  const errors = [];
-
-  const budget = Number(data.budgetDiv);
-  if (isNaN(budget) || budget < 0) {
-    errors.push("Budget invalide (doit être >= 0)");
-  }
-  if (budget > 1000) {
-    errors.push("Budget trop élevé (max 1000 divines)");
-  }
-
-  const ilvl = Number(data.ilvl);
-  if (isNaN(ilvl) || ilvl < 1 || ilvl > 100) {
-    errors.push("Item level invalide (doit être entre 1 et 100)");
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors
-  };
+  return { data, priorities, checklist, steps, scores, economy };
 }
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
 
   const data = Object.fromEntries(new FormData(form).entries());
-
-  // Validate form data
-  const validation = validateFormData(data);
-  if (!validation.valid) {
-    setFeedback(validation.errors.join(". "), "error");
-    return;
-  }
-
   const plan = buildPlan(data);
 
   latestPlan = plan;
   renderPlan(plan);
   storeHistory(plan);
   renderHistory();
-  updateSaveFavoriteButton();
-  setFeedback("Plan généré avec succès", "success");
+  setFeedback("Plan genere avec integration economie PoE2DB.");
 });
 
 saveFavoriteButton.addEventListener("click", () => {
   if (!latestPlan) {
-    setFeedback("Génère d'abord un plan pour l'ajouter aux favoris.", "info");
+    setFeedback("Genere d'abord un plan pour l'ajouter aux favoris.");
     return;
   }
 
-  if (isPlanInFavorites(latestPlan)) {
-    setFeedback("Ce plan est déjà dans les favoris", "info");
-    return;
-  }
-
-  const success = storeFavorite(latestPlan);
-  if (success) {
-    renderFavorites();
-    updateSaveFavoriteButton();
-  }
+  storeFavorite(latestPlan);
+  renderFavorites();
+  setFeedback("Plan ajoute aux favoris.");
 });
 
 copyPlanButton.addEventListener("click", async () => {
   if (!latestPlan) {
-    setFeedback("Génère d'abord un plan à copier.", "info");
+    setFeedback("Genere d'abord un plan a copier.");
     return;
   }
 
   try {
     await navigator.clipboard.writeText(planToText(latestPlan));
-    setFeedback("Plan copié dans le presse-papiers", "success");
+    setFeedback("Plan copie dans le presse-papiers.");
   } catch {
-    setFeedback("Copie impossible dans ce navigateur", "error");
+    setFeedback("Copie impossible dans ce navigateur.");
   }
 });
-
-/**
- * Export current plan as JSON file
- */
-exportPlanButton.addEventListener("click", () => {
-  if (!latestPlan) {
-    setFeedback("Génère d'abord un plan à exporter", "info");
-    return;
-  }
-
-  try {
-    const dataStr = JSON.stringify(latestPlan, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `poe2-craft-${formatTitle(latestPlan.data).replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
-    link.click();
-
-    URL.revokeObjectURL(url);
-    setFeedback("Plan exporté avec succès", "success");
-  } catch (error) {
-    console.error("Export error:", error);
-    setFeedback("Erreur lors de l'export", "error");
-  }
-});
-
-/**
- * Import plan from JSON file
- */
-importPlanButton.addEventListener("click", () => {
-  importFileInput.click();
-});
-
-importFileInput.addEventListener("change", (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const importedPlan = JSON.parse(e.target.result);
-
-      // Validate imported plan structure
-      if (!importedPlan.data || !importedPlan.priorities || !importedPlan.checklist) {
-        setFeedback("Fichier JSON invalide", "error");
-        return;
-      }
-
-      latestPlan = importedPlan;
-      renderPlan(importedPlan);
-
-      // Populate form
-      Object.entries(importedPlan.data).forEach(([key, value]) => {
-        const input = form.elements[key];
-        if (input) input.value = value;
-      });
-
-      updateSaveFavoriteButton();
-      setFeedback("Plan importé avec succès", "success");
-    } catch (error) {
-      console.error("Import error:", error);
-      setFeedback("Erreur lors de l'import du fichier", "error");
-    }
-  };
-
-  reader.readAsText(file);
-  // Reset input to allow re-importing the same file
-  event.target.value = '';
-});
-
-/**
- * Update save favorite button visual state
- */
-function updateSaveFavoriteButton() {
-  if (!latestPlan) {
-    saveFavoriteButton.textContent = "Ajouter aux favoris";
-    saveFavoriteButton.disabled = false;
-    return;
-  }
-
-  if (isPlanInFavorites(latestPlan)) {
-    saveFavoriteButton.textContent = "✓ Déjà en favoris";
-    saveFavoriteButton.disabled = true;
-  } else {
-    saveFavoriteButton.textContent = "Ajouter aux favoris";
-    saveFavoriteButton.disabled = false;
-  }
-}
 
 clearHistoryButton.addEventListener("click", () => {
-  if (!confirm("Vider tout l'historique ? Cette action est irréversible.")) {
-    return;
-  }
-
   writeJson(STORAGE_HISTORY, []);
   renderHistory();
-  setFeedback("Historique vidé", "success");
+  setFeedback("Historique vide.");
 });
 
 clearFavoritesButton.addEventListener("click", () => {
-  if (!confirm("Vider tous les favoris ? Cette action est irréversible.")) {
-    return;
-  }
-
   writeJson(STORAGE_FAVORITES, []);
   renderFavorites();
-  setFeedback("Favoris vidés", "success");
+  setFeedback("Favoris vides.");
 });
 
 document.querySelectorAll(".tab").forEach((button) => {
@@ -680,4 +456,4 @@ document.querySelectorAll(".tab").forEach((button) => {
 renderHistory();
 renderFavorites();
 renderGuide();
-setFeedback("Pret.");
+setFeedback("Pret. Source eco: PoE2DB snapshot 2026-02-06.");
