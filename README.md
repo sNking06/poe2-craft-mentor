@@ -21,16 +21,16 @@ Guider les joueurs debutants et avances pour:
 - Guide rapide anti-erreurs
 
 ## Structure
-- `01_docs` : notes produit et cadrage
-- `02_source/frontend` : application web statique (HTML/CSS/JS)
-- `02_source/backend` : reserve pour evolutions API
-- `03_tests` : tests futurs
-- `04_assets` : ressources visuelles
-- `05_exploitation` : scripts/process de livraison
-- `06_livraison` : sorties versionnees
+- `docs` : notes produit et cadrage
+- `frontend` : application web statique (HTML/CSS/JS)
+- `backend` : reserve pour evolutions API
+- `tests` : tests futurs
+- `assets` : ressources visuelles
+- `ops` : scripts/process de livraison
+- `releases` : sorties versionnees
 
 ## Lancer en local
-1. Ouvrir `02_source/frontend/index.html` dans le navigateur.
+1. Ouvrir `frontend/index.html` dans le navigateur.
 
 ## Deployment GitHub Pages
 Le repo contient deja le workflow:
