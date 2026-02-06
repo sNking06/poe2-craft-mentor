@@ -191,11 +191,11 @@ function scoreClass(value) {
 }
 
 function formatTitle(data) {
-  return `${data.slot} | ${data.objectif} | ${data.damageType} | ${data.budgetDiv} div`;
+  return `${data.slot} | ${data.objectif} | ${data.damageType} | ${data.craftMethod} | ${data.budgetDiv} div`;
 }
 
 function buildCurrencyBasket(data) {
-  const basket = [
+  const baseBasket = [
     { name: "Chaos Orb", units: 40 },
     { name: "Orb of Annulment", units: 2 },
     { name: "Regal Orb", units: 20 },
@@ -203,16 +203,62 @@ function buildCurrencyBasket(data) {
     { name: "Orb of Alchemy", units: 30 }
   ];
 
-  if (data.objectif === "degats") {
-    basket.push({ name: "Vaal Orb", units: 15 });
-    basket.push({ name: "Gemcutter's Prism", units: 12 });
+  const methodBasket = {
+    essence: [
+      { name: "Chaos Orb", units: 60 },
+      { name: "Orb of Alchemy", units: 60 },
+      { name: "Regal Orb", units: 24 }
+    ],
+    annul_exalt: [
+      { name: "Orb of Annulment", units: 10 },
+      { name: "Exalted Orb", units: 120 },
+      { name: "Regal Orb", units: 40 }
+    ],
+    chaos_spam: [
+      { name: "Chaos Orb", units: 220 },
+      { name: "Regal Orb", units: 10 }
+    ],
+    vaal_finish: [
+      { name: "Vaal Orb", units: 80 },
+      { name: "Chaos Orb", units: 60 },
+      { name: "Regal Orb", units: 16 }
+    ],
+    fracture_setup: [
+      { name: "Fracturing Orb", units: 2 },
+      { name: "Orb of Annulment", units: 8 },
+      { name: "Exalted Orb", units: 80 }
+    ],
+    budget_progressif: [
+      { name: "Chaos Orb", units: 80 },
+      { name: "Orb of Alchemy", units: 100 },
+      { name: "Regal Orb", units: 18 },
+      { name: "Lesser Jeweller's Orb", units: 90 }
+    ]
+  };
+
+  const basket = [...baseBasket, ...(methodBasket[data.craftMethod] || [])];
+
+  if (data.objectif === "degats" || data.craftMethod === "vaal_finish") {
+    basket.push({ name: "Vaal Orb", units: 20 });
+    basket.push({ name: "Gemcutter's Prism", units: 14 });
   }
   if (data.objectif === "survie") basket.push({ name: "Artificer's Orb", units: 12 });
   if (data.objectif === "mobilite") basket.push({ name: "Greater Regal Orb", units: 6 });
-  if (data.risque === "agressif") basket.push({ name: "Fracturing Orb", units: 1 });
-  if (data.mode === "debutant") return basket.filter((c) => c.name !== "Fracturing Orb");
+  if (data.risque === "agressif" || data.craftMethod === "fracture_setup") {
+    basket.push({ name: "Fracturing Orb", units: 1 });
+  }
 
-  return basket;
+  const merged = Object.values(
+    basket.reduce((acc, row) => {
+      if (!acc[row.name]) acc[row.name] = { ...row };
+      else acc[row.name].units += row.units;
+      return acc;
+    }, {})
+  );
+
+  if (data.mode === "debutant") return merged.filter((c) => c.name !== "Fracturing Orb");
+
+  return merged;
 }
 
 function buildEconomyInsight(data) {
@@ -311,20 +357,32 @@ function buildCurrencyAdvice(data, economy, strategy) {
   };
 
   const boosted = objectiveBoost[data.objectif] || new Set();
+  const methodBoost = {
+    essence: new Set(["Chaos Orb", "Orb of Alchemy", "Regal Orb"]),
+    annul_exalt: new Set(["Orb of Annulment", "Exalted Orb", "Regal Orb"]),
+    chaos_spam: new Set(["Chaos Orb"]),
+    vaal_finish: new Set(["Vaal Orb", "Gemcutter's Prism"]),
+    fracture_setup: new Set(["Fracturing Orb", "Orb of Annulment", "Exalted Orb"]),
+    budget_progressif: new Set(["Chaos Orb", "Orb of Alchemy", "Lesser Jeweller's Orb"])
+  };
+  const methoded = methodBoost[data.craftMethod] || new Set();
 
   const scored = economy.basket.map((item) => {
     const trendBonus = item.trend7d <= -10 ? 18 : item.trend7d <= -3 ? 10 : item.trend7d >= 10 ? -16 : 0;
     const liquidityBonus = item.volume24h >= 1000000 ? 12 : item.volume24h >= 250000 ? 6 : -10;
     const affordabilityBonus = item.chaosCost <= economy.totalChaos * 0.22 ? 9 : -4;
     const objectiveBonus = boosted.has(item.name) ? 12 : 0;
+    const methodBonus = methoded.has(item.name) ? 16 : 0;
     const riskPenalty = data.risque === "safe" && item.name === "Fracturing Orb" ? -40 : 0;
+    const methodPenalty = data.craftMethod === "budget_progressif" && item.chaosCost > economy.totalChaos * 0.25 ? -14 : 0;
     const strategyBonus = strategy.decision === "FARM" && item.chaosCost <= economy.totalChaos * 0.12 ? 8 : 0;
-    const score = 50 + trendBonus + liquidityBonus + affordabilityBonus + objectiveBonus + riskPenalty + strategyBonus;
+    const score = 50 + trendBonus + liquidityBonus + affordabilityBonus + objectiveBonus + methodBonus + riskPenalty + methodPenalty + strategyBonus;
 
     let reason = "Bon compromis cout/liquidite.";
     if (item.trend7d <= -10) reason = "Prix en baisse: fenetre d'achat interessante.";
     if (item.volume24h < 150000) reason = "Liquidite faible: execution plus difficile.";
     if (boosted.has(item.name)) reason = "Fort impact pour ton objectif de craft.";
+    if (methoded.has(item.name)) reason = "Currency clef pour la methode de craft selectionnee.";
     if (data.risque === "safe" && item.name === "Fracturing Orb") reason = "Trop risquee pour mode safe.";
 
     return { ...item, score, reason };
@@ -379,6 +437,7 @@ function renderPlan(plan) {
       <p class="tag">${plan.data.objectif}</p>
       <p class="tag">${plan.data.damageType}</p>
       <p class="tag">${plan.data.segment}</p>
+      <p class="tag">${plan.data.craftMethod}</p>
       ${budgetChip}
       <p><strong>Build:</strong> ${plan.data.build || "non precise"} | <strong>Budget:</strong> ${plan.data.budgetDiv} div | <strong>ilvl:</strong> ${plan.data.ilvl}</p>
       <div class="kpi">

@@ -10,6 +10,7 @@ Guider les joueurs debutants et avances pour:
 
 ## Fonctionnalites V1
 - Formulaire de craft complet (mode debutant/avance)
+- Recommandation par methode de craft (essence, annul/exalt, chaos spam, vaal finish, fracture, budget progressif)
 - Type de degats (physique, feu, froid, foudre, chaos, minions, mixte)
 - Budget exact en Divines
 - Priorites de mods par slot et objectif
