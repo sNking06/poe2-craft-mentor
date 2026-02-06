@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POE2 Craft Mentor - Tests</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+      border-bottom: 3px solid #0b6e6b;
+      padding-bottom: 10px;
+    }
+    #output {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 20px;
+      border-radius: 8px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+    .success {
+      color: #4ec9b0;
+    }
+    .error {
+      color: #f48771;
+    }
+    .info {
+      color: #569cd6;
+    }
+    button {
+      background: #0b6e6b;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+    button:hover {
+      background: #085f73;
+    }
+  </style>
+</head>
+<body>
+  <h1>POE2 Craft Mentor - Test Suite</h1>
+  <button onclick="runTests()">▶ Run Tests</button>
+  <div id="output">Click "Run Tests" to execute the test suite...</div>
+
+  <script src="craft-logic.test.js"></script>
+  <script>
+    const outputDiv = document.getElementById('output');
+
+    // Override console methods to capture output
+    const originalLog = console.log;
+    const originalError = console.error;
+    let testOutput = '';
+
+    console.log = function(...args) {
+      const message = args.join(' ');
+      testOutput += message + '\n';
+      outputDiv.innerHTML = formatOutput(testOutput);
+      originalLog.apply(console, args);
+    };
+
+    console.error = function(...args) {
+      const message = args.join(' ');
+      testOutput += message + '\n';
+      outputDiv.innerHTML = formatOutput(testOutput);
+      originalError.apply(console, args);
+    };
+
+    function formatOutput(text) {
+      return text
+        .replace(/✓/g, '<span class="success">✓</span>')
+        .replace(/✗/g, '<span class="error">✗</span>')
+        .replace(/===/g, '<span class="info">===</span>')
+        .replace(/---/g, '<span class="info">---</span>');
+    }
+
+    function runTests() {
+      testOutput = '';
+      outputDiv.innerHTML = '<span class="info">Running tests...</span>\n\n';
+
+      // Reset counters
+      testsPassed = 0;
+      testsFailed = 0;
+
+      // Re-run tests by reloading the script
+      setTimeout(() => {
+        location.reload();
+      }, 100);
+    }
+  </script>
+</body>
+</html>
