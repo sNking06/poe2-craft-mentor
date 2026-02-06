@@ -122,9 +122,12 @@
           <div class="stack">
             <button id="save-favorite" type="button" class="btn btn-primary">Ajouter aux favoris</button>
             <button id="copy-plan" type="button" class="btn btn-light">Copier le plan</button>
+            <button id="export-plan" type="button" class="btn btn-light">Exporter JSON</button>
+            <button id="import-plan" type="button" class="btn btn-light">Importer JSON</button>
             <button id="clear-history" type="button" class="btn btn-light">Vider historique</button>
             <button id="clear-favorites" type="button" class="btn btn-light">Vider favoris</button>
           </div>
+          <input type="file" id="import-file" accept="application/json,.json" style="display: none;" />
           <p id="feedback" class="feedback" aria-live="polite"></p>
         </section>
       </section>

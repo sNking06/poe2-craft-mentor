@@ -192,6 +192,17 @@ button:focus {
   margin: 10px 0 0;
   color: var(--ink-soft);
   font-size: 0.9rem;
+  transition: color 0.3s ease;
+}
+
+.feedback-success {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.feedback-error {
+  color: var(--danger);
+  font-weight: 600;
 }
 
 .card {
@@ -240,15 +251,93 @@ button:focus {
   color: var(--danger);
 }
 
-.resultat ul,
-.liste {
+.resultat ul {
   margin: 8px 0 0;
   padding-left: 20px;
 }
 
+.liste {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
 .liste li {
-  margin: 0 0 7px;
+  margin: 0 0 10px;
   color: var(--ink-soft);
+}
+
+.empty-state {
+  color: var(--ink-soft);
+  font-style: italic;
+  text-align: center;
+  padding: 16px;
+}
+
+.history-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fcfdff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.history-card:hover {
+  background: #f0f7ff;
+  border-color: var(--primary);
+  transform: translateX(4px);
+}
+
+.history-card-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-card-content strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.date-label {
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+}
+
+.btn-icon {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  transition: all 0.2s ease;
+}
+
+.btn-delete {
+  background: #fff;
+  border: 1px solid #ddd;
+  color: var(--ink-soft);
+}
+
+.btn-delete:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 @media (max-width: 900px) {
