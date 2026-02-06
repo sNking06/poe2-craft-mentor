@@ -1,6 +1,17 @@
-﻿const STORAGE_HISTORY = "poe2_craft_history_v2";
-const STORAGE_FAVORITES = "poe2_craft_favorites_v2";
+﻿// =======================
+// CONFIGURATION & CONSTANTS
+// =======================
 
+const STORAGE_HISTORY = "poe2_craft_history_v2";
+const STORAGE_FAVORITES = "poe2_craft_favorites_v2";
+const MAX_HISTORY_ITEMS = 20;
+const MAX_FAVORITE_ITEMS = 20;
+
+// Score thresholds for visual feedback
+const SCORE_LOW = 35;
+const SCORE_MEDIUM = 65;
+
+// DOM Elements
 const form = document.getElementById("craft-form");
 const resultat = document.getElementById("resultat");
 const historique = document.getElementById("historique");
@@ -10,6 +21,9 @@ const feedback = document.getElementById("feedback");
 
 const saveFavoriteButton = document.getElementById("save-favorite");
 const copyPlanButton = document.getElementById("copy-plan");
+const exportPlanButton = document.getElementById("export-plan");
+const importPlanButton = document.getElementById("import-plan");
+const importFileInput = document.getElementById("import-file");
 const clearHistoryButton = document.getElementById("clear-history");
 const clearFavoritesButton = document.getElementById("clear-favorites");
 
@@ -55,20 +69,53 @@ const slotDefensiveMods = {
   arme: ["Defense Through Offense", "Sustain Utility", "Crit/Leech Utility", "Speed", "Optional Resist"]
 };
 
-function setFeedback(message) {
+/**
+ * Display feedback message to user
+ * @param {string} message - Message to display
+ * @param {string} type - Message type: 'success', 'error', 'info'
+ */
+function setFeedback(message, type = 'info') {
   feedback.textContent = message;
+  feedback.className = 'feedback';
+  if (type === 'error') feedback.classList.add('feedback-error');
+  if (type === 'success') feedback.classList.add('feedback-success');
 }
 
+/**
+ * Read JSON data from localStorage with error handling
+ * @param {string} key - Storage key
+ * @returns {Array} Parsed data or empty array on error
+ */
 function readJson(key) {
   try {
-    return JSON.parse(localStorage.getItem(key) || "[]");
-  } catch {
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : [];
+  } catch (error) {
+    console.error(`Error reading ${key} from localStorage:`, error);
+    setFeedback("Erreur de lecture du stockage local", "error");
     return [];
   }
 }
 
+/**
+ * Write JSON data to localStorage with error handling
+ * @param {string} key - Storage key
+ * @param {any} value - Data to store
+ * @returns {boolean} Success status
+ */
 function writeJson(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (error) {
+    console.error(`Error writing ${key} to localStorage:`, error);
+    if (error.name === 'QuotaExceededError') {
+      setFeedback("Stockage local plein. Videz l'historique.", "error");
+    } else {
+      setFeedback("Erreur de sauvegarde", "error");
+    }
+    return false;
+  }
 }
 
 function getRiskFactor(risk) {
@@ -117,24 +164,85 @@ function buildSteps(data) {
   return steps;
 }
 
+/**
+ * Compute scores for a craft plan
+ *
+ * Power Score (0-100): Indicates potential strength of the craft
+ * - Higher budget = more power (logarithmic scaling)
+ * - More priorities = more power
+ * - Higher stage (endgame) = more power
+ * - Higher complexity = less power
+ *
+ * Risk Score (0-100): Indicates chance of failure/bricking
+ * - Higher complexity = more risk
+ * - More aggressive risk tolerance = more risk
+ * - Beginner mode = lower risk (safer recommendations)
+ *
+ * Cost Pressure (0-100): Indicates budget strain
+ * - Higher complexity = more pressure
+ * - Higher risk tolerance = more pressure
+ * - Higher stage = more pressure
+ * - Higher budget = less pressure
+ *
+ * @param {Object} data - Craft parameters
+ * @param {Array} priorities - List of priority mods
+ * @returns {Object} {power, riskScore, costPressure}
+ */
 function computeScores(data, priorities) {
   const budget = Number(data.budgetDiv);
   const complexity = slotComplexity[data.slot] * (data.objectif === "degats" ? 1.2 : 1);
   const stage = getStageFactor(data.stade);
   const risk = getRiskFactor(data.risque);
 
+  // Power: base 35, logarithmic budget scaling, priorities bonus, stage bonus, complexity penalty
   const budgetPower = Math.min(100, 35 + Math.log10(budget + 1) * 28);
-  const power = Math.round(Math.max(10, Math.min(100, budgetPower + priorities.length * 4 + stage * 10 - complexity * 8)));
-  const riskScore = Math.round(Math.max(5, Math.min(100, 35 + risk * complexity * 22 - (data.mode === "debutant" ? 8 : 0))));
-  const costPressure = Math.round(Math.max(5, Math.min(100, 25 + complexity * 22 + risk * 12 + stage * 8 - Math.min(25, budget * 0.5))));
+  const power = Math.round(
+    Math.max(10, Math.min(100,
+      budgetPower + priorities.length * 4 + stage * 10 - complexity * 8
+    ))
+  );
+
+  // Risk: base 35, scaled by complexity and risk tolerance, beginner mode reduction
+  const riskScore = Math.round(
+    Math.max(5, Math.min(100,
+      35 + risk * complexity * 22 - (data.mode === "debutant" ? 8 : 0)
+    ))
+  );
+
+  // Cost Pressure: base 25, complexity penalty, risk penalty, stage penalty, budget relief (max 25)
+  const costPressure = Math.round(
+    Math.max(5, Math.min(100,
+      25 + complexity * 22 + risk * 12 + stage * 8 - Math.min(25, budget * 0.5)
+    ))
+  );
 
   return { power, riskScore, costPressure };
 }
 
+/**
+ * Get CSS class for score value
+ * @param {number} value - Score value (0-100)
+ * @returns {string} CSS class name
+ */
 function scoreClass(value) {
-  if (value <= 35) return "score-ok";
-  if (value <= 65) return "score-mid";
+  if (value <= SCORE_LOW) return "score-ok";
+  if (value <= SCORE_MEDIUM) return "score-mid";
   return "score-bad";
+}
+
+/**
+ * Switch to a different tab
+ * @param {string} tabName - Tab name to switch to
+ */
+function switchTab(tabName) {
+  document.querySelectorAll(".tab").forEach((tab) => tab.classList.remove("is-active"));
+  document.querySelectorAll(".view").forEach((view) => view.classList.remove("is-active"));
+
+  const tabButton = document.querySelector(`[data-tab="${tabName}"]`);
+  const targetView = document.getElementById(`view-${tabName}`);
+
+  if (tabButton) tabButton.classList.add("is-active");
+  if (targetView) targetView.classList.add("is-active");
 }
 
 function formatTitle(data) {
@@ -183,24 +291,46 @@ function renderPlan(plan) {
   `;
 }
 
+/**
+ * Render history list with interactive cards
+ */
 function renderHistory() {
   const entries = readJson(STORAGE_HISTORY);
   if (!entries.length) {
-    historique.innerHTML = "<li>Aucun craft enregistre.</li>";
+    historique.innerHTML = '<li class="empty-state">Aucun craft enregistré.</li>';
     return;
   }
 
-  historique.innerHTML = entries.map((entry) => `<li><strong>${entry.title}</strong> - ${entry.date}</li>`).join("");
+  historique.innerHTML = entries.map((entry) => `
+    <li class="history-card">
+      <div class="history-card-content" onclick='restorePlan(${JSON.stringify(entry.plan).replace(/'/g, "&apos;")})'>
+        <strong>${entry.title}</strong>
+        <span class="date-label">${entry.date}</span>
+      </div>
+      <button class="btn-icon btn-delete" onclick='event.stopPropagation(); removeFromHistory("${entry.id}")' title="Supprimer">✕</button>
+    </li>
+  `).join("");
 }
 
+/**
+ * Render favorites list with interactive cards
+ */
 function renderFavorites() {
   const entries = readJson(STORAGE_FAVORITES);
   if (!entries.length) {
-    favoris.innerHTML = "<li>Aucun favori pour le moment.</li>";
+    favoris.innerHTML = '<li class="empty-state">Aucun favori pour le moment.</li>';
     return;
   }
 
-  favoris.innerHTML = entries.map((entry) => `<li><strong>${entry.title}</strong> - ${entry.date}</li>`).join("");
+  favoris.innerHTML = entries.map((entry) => `
+    <li class="history-card">
+      <div class="history-card-content" onclick='restorePlan(${JSON.stringify(entry.plan).replace(/'/g, "&apos;")})'>
+        <strong>${entry.title}</strong>
+        <span class="date-label">${entry.date}</span>
+      </div>
+      <button class="btn-icon btn-delete" onclick='event.stopPropagation(); removeFromFavorites("${entry.id}")' title="Supprimer">✕</button>
+    </li>
+  `).join("");
 }
 
 function renderGuide() {
@@ -227,22 +357,113 @@ function renderGuide() {
   `;
 }
 
-function storeHistory(plan) {
-  const entries = [
-    { title: formatTitle(plan.data), date: new Date().toLocaleString("fr-FR") },
-    ...readJson(STORAGE_HISTORY)
-  ].slice(0, 20);
+/**
+ * Generate a unique ID for a plan based on its data
+ * @param {Object} data - Plan data
+ * @returns {string} Unique identifier
+ */
+function generatePlanId(data) {
+  return `${data.slot}_${data.objectif}_${data.damageType}_${data.budgetDiv}_${data.risque}`;
+}
 
+/**
+ * Check if a plan is already in favorites
+ * @param {Object} plan - Plan to check
+ * @returns {boolean} True if plan exists in favorites
+ */
+function isPlanInFavorites(plan) {
+  const favorites = readJson(STORAGE_FAVORITES);
+  const planId = generatePlanId(plan.data);
+  return favorites.some(fav => fav.id === planId);
+}
+
+/**
+ * Store plan in history (auto-saves latest plans)
+ * @param {Object} plan - Plan to store
+ */
+function storeHistory(plan) {
+  const newEntry = {
+    id: generatePlanId(plan.data),
+    title: formatTitle(plan.data),
+    date: new Date().toLocaleString("fr-FR"),
+    plan: plan
+  };
+
+  const entries = [newEntry, ...readJson(STORAGE_HISTORY)].slice(0, MAX_HISTORY_ITEMS);
   writeJson(STORAGE_HISTORY, entries);
 }
 
+/**
+ * Store plan in favorites (prevents duplicates)
+ * @param {Object} plan - Plan to store
+ * @returns {boolean} Success status
+ */
 function storeFavorite(plan) {
-  const entries = [
-    { title: formatTitle(plan.data), date: new Date().toLocaleString("fr-FR") },
-    ...readJson(STORAGE_FAVORITES)
-  ].slice(0, 20);
+  const favorites = readJson(STORAGE_FAVORITES);
+  const planId = generatePlanId(plan.data);
 
+  // Check for duplicates
+  if (favorites.some(fav => fav.id === planId)) {
+    setFeedback("Ce plan est déjà dans les favoris", "info");
+    return false;
+  }
+
+  const newEntry = {
+    id: planId,
+    title: formatTitle(plan.data),
+    date: new Date().toLocaleString("fr-FR"),
+    plan: plan
+  };
+
+  const entries = [newEntry, ...favorites].slice(0, MAX_FAVORITE_ITEMS);
+  const success = writeJson(STORAGE_FAVORITES, entries);
+
+  if (success) {
+    setFeedback("Plan ajouté aux favoris", "success");
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Remove a single item from history
+ * @param {string} id - Item ID to remove
+ */
+function removeFromHistory(id) {
+  const entries = readJson(STORAGE_HISTORY).filter(entry => entry.id !== id);
+  writeJson(STORAGE_HISTORY, entries);
+  renderHistory();
+  setFeedback("Item supprimé de l'historique", "success");
+}
+
+/**
+ * Remove a single item from favorites
+ * @param {string} id - Item ID to remove
+ */
+function removeFromFavorites(id) {
+  const entries = readJson(STORAGE_FAVORITES).filter(entry => entry.id !== id);
   writeJson(STORAGE_FAVORITES, entries);
+  renderFavorites();
+  setFeedback("Item supprimé des favoris", "success");
+}
+
+/**
+ * Restore a plan from history or favorites
+ * @param {Object} plan - Plan to restore
+ */
+function restorePlan(plan) {
+  latestPlan = plan;
+  renderPlan(plan);
+
+  // Populate form with plan data
+  Object.entries(plan.data).forEach(([key, value]) => {
+    const input = form.elements[key];
+    if (input) input.value = value;
+  });
+
+  // Switch to assistant tab
+  switchTab('assistant');
+  setFeedback("Plan restauré", "success");
 }
 
 function buildPlan(data) {
@@ -254,54 +475,195 @@ function buildPlan(data) {
   return { data, priorities, checklist, steps, scores };
 }
 
+/**
+ * Validate form data
+ * @param {Object} data - Form data to validate
+ * @returns {Object} Validation result {valid: boolean, errors: string[]}
+ */
+function validateFormData(data) {
+  const errors = [];
+
+  const budget = Number(data.budgetDiv);
+  if (isNaN(budget) || budget < 0) {
+    errors.push("Budget invalide (doit être >= 0)");
+  }
+  if (budget > 1000) {
+    errors.push("Budget trop élevé (max 1000 divines)");
+  }
+
+  const ilvl = Number(data.ilvl);
+  if (isNaN(ilvl) || ilvl < 1 || ilvl > 100) {
+    errors.push("Item level invalide (doit être entre 1 et 100)");
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
 form.addEventListener("submit", (event) => {
   event.preventDefault();
 
   const data = Object.fromEntries(new FormData(form).entries());
+
+  // Validate form data
+  const validation = validateFormData(data);
+  if (!validation.valid) {
+    setFeedback(validation.errors.join(". "), "error");
+    return;
+  }
+
   const plan = buildPlan(data);
 
   latestPlan = plan;
   renderPlan(plan);
   storeHistory(plan);
   renderHistory();
-  setFeedback("Plan genere avec succes.");
+  updateSaveFavoriteButton();
+  setFeedback("Plan généré avec succès", "success");
 });
 
 saveFavoriteButton.addEventListener("click", () => {
   if (!latestPlan) {
-    setFeedback("Genere d'abord un plan pour l'ajouter aux favoris.");
+    setFeedback("Génère d'abord un plan pour l'ajouter aux favoris.", "info");
     return;
   }
 
-  storeFavorite(latestPlan);
-  renderFavorites();
-  setFeedback("Plan ajoute aux favoris.");
+  if (isPlanInFavorites(latestPlan)) {
+    setFeedback("Ce plan est déjà dans les favoris", "info");
+    return;
+  }
+
+  const success = storeFavorite(latestPlan);
+  if (success) {
+    renderFavorites();
+    updateSaveFavoriteButton();
+  }
 });
 
 copyPlanButton.addEventListener("click", async () => {
   if (!latestPlan) {
-    setFeedback("Genere d'abord un plan a copier.");
+    setFeedback("Génère d'abord un plan à copier.", "info");
     return;
   }
 
   try {
     await navigator.clipboard.writeText(planToText(latestPlan));
-    setFeedback("Plan copie dans le presse-papiers.");
+    setFeedback("Plan copié dans le presse-papiers", "success");
   } catch {
-    setFeedback("Copie impossible dans ce navigateur.");
+    setFeedback("Copie impossible dans ce navigateur", "error");
   }
 });
 
+/**
+ * Export current plan as JSON file
+ */
+exportPlanButton.addEventListener("click", () => {
+  if (!latestPlan) {
+    setFeedback("Génère d'abord un plan à exporter", "info");
+    return;
+  }
+
+  try {
+    const dataStr = JSON.stringify(latestPlan, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `poe2-craft-${formatTitle(latestPlan.data).replace(/[^a-z0-9]/gi, '_')}_${Date.now()}.json`;
+    link.click();
+
+    URL.revokeObjectURL(url);
+    setFeedback("Plan exporté avec succès", "success");
+  } catch (error) {
+    console.error("Export error:", error);
+    setFeedback("Erreur lors de l'export", "error");
+  }
+});
+
+/**
+ * Import plan from JSON file
+ */
+importPlanButton.addEventListener("click", () => {
+  importFileInput.click();
+});
+
+importFileInput.addEventListener("change", (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const importedPlan = JSON.parse(e.target.result);
+
+      // Validate imported plan structure
+      if (!importedPlan.data || !importedPlan.priorities || !importedPlan.checklist) {
+        setFeedback("Fichier JSON invalide", "error");
+        return;
+      }
+
+      latestPlan = importedPlan;
+      renderPlan(importedPlan);
+
+      // Populate form
+      Object.entries(importedPlan.data).forEach(([key, value]) => {
+        const input = form.elements[key];
+        if (input) input.value = value;
+      });
+
+      updateSaveFavoriteButton();
+      setFeedback("Plan importé avec succès", "success");
+    } catch (error) {
+      console.error("Import error:", error);
+      setFeedback("Erreur lors de l'import du fichier", "error");
+    }
+  };
+
+  reader.readAsText(file);
+  // Reset input to allow re-importing the same file
+  event.target.value = '';
+});
+
+/**
+ * Update save favorite button visual state
+ */
+function updateSaveFavoriteButton() {
+  if (!latestPlan) {
+    saveFavoriteButton.textContent = "Ajouter aux favoris";
+    saveFavoriteButton.disabled = false;
+    return;
+  }
+
+  if (isPlanInFavorites(latestPlan)) {
+    saveFavoriteButton.textContent = "✓ Déjà en favoris";
+    saveFavoriteButton.disabled = true;
+  } else {
+    saveFavoriteButton.textContent = "Ajouter aux favoris";
+    saveFavoriteButton.disabled = false;
+  }
+}
+
 clearHistoryButton.addEventListener("click", () => {
+  if (!confirm("Vider tout l'historique ? Cette action est irréversible.")) {
+    return;
+  }
+
   writeJson(STORAGE_HISTORY, []);
   renderHistory();
-  setFeedback("Historique vide.");
+  setFeedback("Historique vidé", "success");
 });
 
 clearFavoritesButton.addEventListener("click", () => {
+  if (!confirm("Vider tous les favoris ? Cette action est irréversible.")) {
+    return;
+  }
+
   writeJson(STORAGE_FAVORITES, []);
   renderFavorites();
-  setFeedback("Favoris vides.");
+  setFeedback("Favoris vidés", "success");
 });
 
 document.querySelectorAll(".tab").forEach((button) => {
