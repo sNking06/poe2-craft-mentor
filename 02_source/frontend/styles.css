@@ -1,27 +1,131 @@
 ﻿:root {
-  font-family: Segoe UI, Arial, sans-serif;
+  --bg-a: #f6f7f4;
+  --bg-b: #dde9ef;
+  --ink: #1d2433;
+  --ink-soft: #4d586e;
+  --panel: #ffffffee;
+  --line: #cad4de;
+  --accent: #0f766e;
+  --accent-2: #b45309;
 }
+
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 10% 10%, #fff4df 0%, transparent 45%),
+    radial-gradient(circle at 90% 20%, #d8f4ef 0%, transparent 38%),
+    linear-gradient(135deg, var(--bg-a), var(--bg-b));
   min-height: 100vh;
+}
+
+.app {
+  width: min(980px, 92vw);
+  margin: 28px auto 40px;
   display: grid;
-  place-items: center;
-  background: #f5f7fa;
-  color: #1f2937;
+  gap: 18px;
 }
-.container {
-  background: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 12px;
-  padding: 24px;
-  width: min(92vw, 680px);
+
+.hero {
+  padding: 18px 20px;
 }
+
+.kicker {
+  margin: 0;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+}
+
+h1 {
+  margin: 6px 0 8px;
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 10px 30px #1d243312;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 6px;
+  font-weight: 500;
+  font-size: 0.92rem;
+}
+
+select,
 button {
-  margin-top: 8px;
-  padding: 10px 14px;
-  border-radius: 8px;
-  border: 1px solid #9ca3af;
-  background: #111827;
-  color: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #a6b4c5;
+  min-height: 42px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+button {
+  grid-column: 1 / -1;
   cursor: pointer;
+  border: none;
+  color: #fff;
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--accent), #0e7490);
+}
+
+h2 {
+  margin: 0 0 12px;
+}
+
+.resultat ul,
+.historique {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.resultat p {
+  margin: 0;
+}
+
+.historique li {
+  margin: 0 0 8px;
+  color: var(--ink-soft);
+}
+
+.tag {
+  display: inline-block;
+  margin-bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e7f7f5;
+  color: #0b615a;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .app {
+    width: 94vw;
+    margin-top: 18px;
+  }
 }

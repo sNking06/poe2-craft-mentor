@@ -3,15 +3,90 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>2026-001 projet web</title>
+  <title>Craft Mentor POE2</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="container">
-    <h1>Projet web local</h1>
-    <p>Base initiale prete pour le developpement.</p>
-    <button id="ping">Tester JS</button>
+  <main class="app">
+    <header class="hero">
+      <p class="kicker">MVP local</p>
+      <h1>Craft Mentor POE2</h1>
+      <p class="subtitle">Tu decris ton craft cible, l'outil te propose une strategie simple et actionnable.</p>
+    </header>
+
+    <section class="panel">
+      <form id="craft-form" class="grid">
+        <label>
+          Type d'item
+          <select name="slot" required>
+            <option value="arme">Arme</option>
+            <option value="casque">Casque</option>
+            <option value="armure">Armure</option>
+            <option value="gants">Gants</option>
+            <option value="bottes">Bottes</option>
+            <option value="ceinture">Ceinture</option>
+            <option value="anneau">Anneau</option>
+            <option value="amulette">Amulette</option>
+          </select>
+        </label>
+
+        <label>
+          Objectif principal
+          <select name="objectif" required>
+            <option value="degats">Degats</option>
+            <option value="survie">Survie</option>
+            <option value="resistances">Resistances</option>
+            <option value="mobilite">Mobilite / confort</option>
+          </select>
+        </label>
+
+        <label>
+          Progression
+          <select name="stade" required>
+            <option value="leveling">Leveling</option>
+            <option value="midgame">Midgame</option>
+            <option value="endgame">Endgame</option>
+          </select>
+        </label>
+
+        <label>
+          Budget
+          <select name="budget" required>
+            <option value="faible">Faible</option>
+            <option value="moyen">Moyen</option>
+            <option value="eleve">Eleve</option>
+          </select>
+        </label>
+
+        <label>
+          Prise de risque
+          <select name="risque" required>
+            <option value="safe">Safe</option>
+            <option value="equilibre">Equilibre</option>
+            <option value="agressif">Agressif</option>
+          </select>
+        </label>
+
+        <button type="submit">Generer un plan de craft</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Conseil</h2>
+      <div id="resultat" class="resultat">
+        <p>Remplis le formulaire pour obtenir une strategie.</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Historique local</h2>
+      <ul id="historique" class="historique"></ul>
+    </section>
   </main>
+
   <script src="app.js"></script>
 </body>
 </html>
