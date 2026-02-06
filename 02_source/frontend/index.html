@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Craft Mentor POE2</title>
+  <title>Craft Mentor POE2 - V1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -12,78 +12,130 @@
 <body>
   <main class="app">
     <header class="hero">
-      <p class="kicker">MVP local</p>
+      <p class="kicker">V1 solide</p>
       <h1>Craft Mentor POE2</h1>
-      <p class="subtitle">Tu decris ton craft cible, l'outil te propose une strategie simple et actionnable.</p>
+      <p class="subtitle">Assistant de craft local: recommandations par situation, score, historique et favoris.</p>
     </header>
 
-    <section class="panel">
-      <form id="craft-form" class="grid">
-        <label>
-          Type d'item
-          <select name="slot" required>
-            <option value="arme">Arme</option>
-            <option value="casque">Casque</option>
-            <option value="armure">Armure</option>
-            <option value="gants">Gants</option>
-            <option value="bottes">Bottes</option>
-            <option value="ceinture">Ceinture</option>
-            <option value="anneau">Anneau</option>
-            <option value="amulette">Amulette</option>
-          </select>
-        </label>
+    <nav class="tabs" aria-label="Navigation principale">
+      <button class="tab is-active" data-tab="assistant" type="button">Assistant</button>
+      <button class="tab" data-tab="favoris" type="button">Favoris</button>
+      <button class="tab" data-tab="guide" type="button">Guide rapide</button>
+    </nav>
 
-        <label>
-          Objectif principal
-          <select name="objectif" required>
-            <option value="degats">Degats</option>
-            <option value="survie">Survie</option>
-            <option value="resistances">Resistances</option>
-            <option value="mobilite">Mobilite / confort</option>
-          </select>
-        </label>
+    <section class="view is-active" id="view-assistant">
+      <section class="panel">
+        <form id="craft-form" class="grid">
+          <label>
+            Mode
+            <select name="mode" required>
+              <option value="debutant">Debutant</option>
+              <option value="avance">Avance</option>
+            </select>
+          </label>
 
-        <label>
-          Progression
-          <select name="stade" required>
-            <option value="leveling">Leveling</option>
-            <option value="midgame">Midgame</option>
-            <option value="endgame">Endgame</option>
-          </select>
-        </label>
+          <label>
+            Classe / Build (optionnel)
+            <input type="text" name="build" placeholder="Ex: Sorceress Lightning" maxlength="80" />
+          </label>
 
-        <label>
-          Budget
-          <select name="budget" required>
-            <option value="faible">Faible</option>
-            <option value="moyen">Moyen</option>
-            <option value="eleve">Eleve</option>
-          </select>
-        </label>
+          <label>
+            Type d'item
+            <select name="slot" required>
+              <option value="arme">Arme</option>
+              <option value="casque">Casque</option>
+              <option value="armure">Armure</option>
+              <option value="gants">Gants</option>
+              <option value="bottes">Bottes</option>
+              <option value="ceinture">Ceinture</option>
+              <option value="anneau">Anneau</option>
+              <option value="amulette">Amulette</option>
+            </select>
+          </label>
 
-        <label>
-          Prise de risque
-          <select name="risque" required>
-            <option value="safe">Safe</option>
-            <option value="equilibre">Equilibre</option>
-            <option value="agressif">Agressif</option>
-          </select>
-        </label>
+          <label>
+            Objectif principal
+            <select name="objectif" required>
+              <option value="degats">Degats</option>
+              <option value="survie">Survie</option>
+              <option value="resistances">Resistances</option>
+              <option value="mobilite">Mobilite / confort</option>
+            </select>
+          </label>
 
-        <button type="submit">Generer un plan de craft</button>
-      </form>
+          <label>
+            Type de degats
+            <select name="damageType" required>
+              <option value="physique">Physique</option>
+              <option value="foudre">Foudre</option>
+              <option value="feu">Feu</option>
+              <option value="froid">Froid</option>
+              <option value="chaos">Chaos</option>
+              <option value="minions">Minions</option>
+              <option value="mixte">Mixte</option>
+            </select>
+          </label>
+
+          <label>
+            Progression
+            <select name="stade" required>
+              <option value="leveling">Leveling</option>
+              <option value="midgame">Midgame</option>
+              <option value="endgame">Endgame</option>
+            </select>
+          </label>
+
+          <label>
+            Budget exact (Divines)
+            <input type="number" name="budgetDiv" min="0" step="0.1" value="5" required />
+          </label>
+
+          <label>
+            Tolerance au risque
+            <select name="risque" required>
+              <option value="safe">Safe</option>
+              <option value="equilibre">Equilibre</option>
+              <option value="agressif">Agressif</option>
+            </select>
+          </label>
+
+          <label>
+            Item level cible
+            <input type="number" name="ilvl" min="1" max="100" value="75" required />
+          </label>
+
+          <button type="submit">Generer un plan V1</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Plan de craft</h2>
+        <div id="resultat" class="resultat">
+          <p>Remplis le formulaire pour obtenir un plan detaille.</p>
+        </div>
+        <div class="actions">
+          <button id="save-favorite" type="button">Ajouter aux favoris</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Historique local</h2>
+        <ul id="historique" class="liste"></ul>
+      </section>
     </section>
 
-    <section class="panel">
-      <h2>Conseil</h2>
-      <div id="resultat" class="resultat">
-        <p>Remplis le formulaire pour obtenir une strategie.</p>
-      </div>
+    <section class="view" id="view-favoris">
+      <section class="panel">
+        <h2>Favoris</h2>
+        <ul id="favoris" class="liste"></ul>
+      </section>
     </section>
 
-    <section class="panel">
-      <h2>Historique local</h2>
-      <ul id="historique" class="historique"></ul>
+    <section class="view" id="view-guide">
+      <section class="panel">
+        <h2>Guide rapide POE2</h2>
+        <div id="guide-content"></div>
+      </section>
     </section>
   </main>
 
