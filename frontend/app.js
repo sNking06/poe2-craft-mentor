@@ -142,7 +142,7 @@ function buildChecklist(data) {
   return list;
 }
 
-function buildSteps(data) {
+function buildSteps(data, strategy) {
   const steps = [
     "Etape 1: Base correcte + item level valide + qualite appliquee.",
     "Etape 2: Obtenir les priorites 1 et 2 avant toute optimisation secondaire.",
@@ -155,6 +155,16 @@ function buildSteps(data) {
     steps.push("Regle debutant: arreter apres 2 echecs couteux consecutifs.");
   } else {
     steps.push("Regle avance: preparer un rollback (plan B) avant les etapes risquees.");
+  }
+
+  if (strategy.decision === "FARM") {
+    steps.unshift("Etape 0: Monter le budget cible avant craft (farm + achats fractionnes).");
+  }
+  if (strategy.decision === "WAIT") {
+    steps.unshift("Etape 0: Attendre un meilleur timing prix/liquidite avant gros achat.");
+  }
+  if (strategy.decision === "GO") {
+    steps.unshift("Etape 0: Verrouiller les ressources du panier maintenant.");
   }
 
   return steps;
@@ -253,12 +263,51 @@ function buildEconomyInsight(data) {
   };
 }
 
+function chooseEconomyStrategy(data, economy) {
+  const budgetDiv = Number(data.budgetDiv);
+  const affordability = budgetDiv / Math.max(0.1, economy.totalDiv);
+  const trend = economy.weightedTrend;
+  const illiquidCount = economy.lowLiquidity.length;
+
+  let decision = "GO";
+  let craftStyle = "Deterministe";
+  let notes = "L'economie permet de lancer le craft immediatement.";
+
+  if (affordability < 0.8) {
+    decision = "FARM";
+    craftStyle = "Low-cost incremental";
+    notes = "Ton budget est trop court: farm/achat progressif avant craft complet.";
+  } else if (trend > 8 || illiquidCount >= 2) {
+    decision = "WAIT";
+    craftStyle = "Timing market";
+    notes = "Marche tendu: attends un meilleur point d'entree ou craft en petite taille.";
+  } else if (affordability >= 1.6 && data.risque === "agressif") {
+    decision = "GO";
+    craftStyle = "Push high variance";
+    notes = "Budget confortable: tu peux tenter une ligne plus agressive.";
+  }
+
+  const planBudget = {
+    acquisition: Math.max(0, Math.round(budgetDiv * 0.45 * 100) / 100),
+    crafting: Math.max(0, Math.round(budgetDiv * 0.4 * 100) / 100),
+    reserve: Math.max(0, Math.round(budgetDiv * 0.15 * 100) / 100)
+  };
+
+  return {
+    decision,
+    craftStyle,
+    notes,
+    affordability,
+    planBudget
+  };
+}
+
 function planToText(plan) {
   const header = `Plan Craft - ${formatTitle(plan.data)} (${new Date().toLocaleString("fr-FR")})`;
   const priorities = plan.priorities.map((m, i) => `P${i + 1}: ${m}`).join("\n");
   const checklist = plan.checklist.map((c) => `- ${c}`).join("\n");
   const steps = plan.steps.map((s) => `- ${s}`).join("\n");
-  const eco = `Cout estime: ${plan.economy.totalChaos.toFixed(1)} chaos (${plan.economy.totalDiv.toFixed(2)} div) | Segment: ${plan.economy.segment}`;
+  const eco = `Cout estime: ${plan.economy.totalChaos.toFixed(1)} chaos (${plan.economy.totalDiv.toFixed(2)} div) | Segment: ${plan.economy.segment} | Decision: ${plan.strategy.decision}`;
 
   return `${header}\n\n${eco}\n\nChecklist:\n${checklist}\n\nPriorites:\n${priorities}\n\nPlan:\n${steps}`;
 }
@@ -278,6 +327,7 @@ function renderPlan(plan) {
   const buyNowText = plan.economy.buyNow.length ? plan.economy.buyNow.join(", ") : "Aucun signal fort";
   const expensiveText = plan.economy.expensiveNow.length ? plan.economy.expensiveNow.join(", ") : "Aucun signal fort";
   const liquidityText = plan.economy.lowLiquidity.length ? plan.economy.lowLiquidity.join(", ") : "Liquidite correcte";
+  const ratioText = `${plan.strategy.affordability.toFixed(2)}x`;
 
   resultat.innerHTML = `
     <div class="card">
@@ -293,6 +343,13 @@ function renderPlan(plan) {
         <span class="${scoreClass(plan.scores.riskScore)}">Risque: <strong>${plan.scores.riskScore}/100</strong></span>
         <span class="${scoreClass(plan.scores.costPressure)}">Pression cout: <strong>${plan.scores.costPressure}/100</strong></span>
       </div>
+    </div>
+    <div class="card">
+      <h3>Decision economie -> craft</h3>
+      <p><strong>Decision:</strong> ${plan.strategy.decision} | <strong>Style recommande:</strong> ${plan.strategy.craftStyle}</p>
+      <p><strong>Couverture budget / cout:</strong> ${ratioText}</p>
+      <p><strong>Allocation budget:</strong> achat matieres ${plan.strategy.planBudget.acquisition} div, craft ${plan.strategy.planBudget.crafting} div, reserve ${plan.strategy.planBudget.reserve} div</p>
+      <p>${plan.strategy.notes}</p>
     </div>
     <div class="card">
       <h3>Analyse economie (${plan.economy.source.provider} ${plan.economy.source.realm})</h3>
@@ -385,11 +442,12 @@ function storeFavorite(plan) {
 function buildPlan(data) {
   const priorities = pickPriorityMods(data);
   const checklist = buildChecklist(data);
-  const steps = buildSteps(data);
   const scores = computeScores(data, priorities);
   const economy = buildEconomyInsight(data);
+  const strategy = chooseEconomyStrategy(data, economy);
+  const steps = buildSteps(data, strategy);
 
-  return { data, priorities, checklist, steps, scores, economy };
+  return { data, priorities, checklist, steps, scores, economy, strategy };
 }
 
 form.addEventListener("submit", (event) => {
