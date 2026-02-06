@@ -25,6 +25,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Refresh PoE2DB economy data
+        run: node ops/fetch-poe2db-economy.js
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

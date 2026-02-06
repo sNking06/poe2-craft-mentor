@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Craft Mentor POE2 - V1</title>
+  <title>POE2 Craft Mentor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Bebas+Neue&display=swap" rel="stylesheet" />
@@ -15,12 +15,12 @@
       <div>
         <p class="kicker">POE2 Craft Assistant</p>
         <h1>Craft Mentor</h1>
-        <p class="subtitle">Decide quelle currency utiliser pour ton craft selon budget, marche et risque.</p>
+        <p class="subtitle">Tu decris la ligne de craft voulue, l'app te dit quelle methode et quelles currencies utiliser.</p>
       </div>
       <div class="hero-badges">
-        <span class="chip">Local-first</span>
-        <span class="chip">0 euro</span>
-        <span class="chip">GitHub Pages</span>
+        <span class="chip">Method first</span>
+        <span class="chip">Currency advice</span>
+        <span class="chip">PoE2DB Economy</span>
       </div>
     </header>
 
@@ -33,19 +33,11 @@
     <section class="view is-active" id="view-assistant">
       <section class="layout">
         <section class="panel">
-          <h2>Parametres de recommandation currency</h2>
+          <h2>Je veux crafter...</h2>
           <form id="craft-form" class="grid">
             <label>
-              Mode
-              <select name="mode" required>
-                <option value="debutant">Debutant</option>
-                <option value="avance">Avance</option>
-              </select>
-            </label>
-
-            <label>
-              Classe / Build (optionnel)
-              <input type="text" name="build" placeholder="Ex: Sorceress Lightning" maxlength="80" />
+              Ligne(s) de craft souhaitee(s)
+              <textarea name="desiredLines" rows="4" maxlength="280" placeholder="Ex: +life, +all resist, +movement speed" required></textarea>
             </label>
 
             <label>
@@ -63,76 +55,12 @@
             </label>
 
             <label>
-              Objectif principal
-              <select name="objectif" required>
-                <option value="degats">Degats</option>
-                <option value="survie">Survie</option>
-                <option value="resistances">Resistances</option>
-                <option value="mobilite">Mobilite / confort</option>
-              </select>
-            </label>
-
-            <label>
-              Type de degats
-              <select name="damageType" required>
-                <option value="physique">Physique</option>
-                <option value="foudre">Foudre</option>
-                <option value="feu">Feu</option>
-                <option value="froid">Froid</option>
-                <option value="chaos">Chaos</option>
-                <option value="minions">Minions</option>
-                <option value="mixte">Mixte</option>
-              </select>
-            </label>
-
-            <label>
-              Methode de craft
-              <select name="craftMethod" required>
-                <option value="essence">Essence craft</option>
-                <option value="annul_exalt">Annul / Exalt</option>
-                <option value="chaos_spam">Chaos spam</option>
-                <option value="vaal_finish">Vaal finish</option>
-                <option value="fracture_setup">Fracture setup</option>
-                <option value="budget_progressif">Budget progressif</option>
-              </select>
-            </label>
-
-            <label>
-              Segment economie (PoE2DB)
-              <select name="segment" required>
-                <option value="Currency">Currency</option>
-                <option value="Fragments">Fragments</option>
-                <option value="Ritual">Ritual</option>
-                <option value="Essences">Essences</option>
-                <option value="Breach">Breach</option>
-                <option value="Delirium">Delirium</option>
-                <option value="Expedition">Expedition</option>
-                <option value="Runes">Runes</option>
-                <option value="Soul Cores">Soul Cores</option>
-                <option value="Idols">Idols</option>
-                <option value="Uncut Gems">Uncut Gems</option>
-                <option value="Abyss">Abyss</option>
-                <option value="Gems">Gems</option>
-                <option value="Incursion">Incursion</option>
-              </select>
-            </label>
-
-            <label>
-              Progression
-              <select name="stade" required>
-                <option value="leveling">Leveling</option>
-                <option value="midgame">Midgame</option>
-                <option value="endgame">Endgame</option>
-              </select>
-            </label>
-
-            <label>
-              Budget exact (Divines)
+              Budget (Divine)
               <input type="number" name="budgetDiv" min="0" step="0.1" value="5" required />
             </label>
 
             <label>
-              Tolerance au risque
+              Niveau de risque
               <select name="risque" required>
                 <option value="safe">Safe</option>
                 <option value="equilibre">Equilibre</option>
@@ -140,34 +68,27 @@
               </select>
             </label>
 
-            <label>
-              Item level cible
-              <input type="number" name="ilvl" min="1" max="100" value="75" required />
-            </label>
-
-            <button type="submit" class="btn btn-primary">Recommander les currencies</button>
+            <button id="submit-button" type="submit" class="btn btn-primary">Trouver la meilleure methode</button>
           </form>
         </section>
 
         <section class="panel sticky-panel">
-          <h2>Actions rapides</h2>
+          <h2>Actions</h2>
           <div class="stack">
             <button id="save-favorite" type="button" class="btn btn-primary">Ajouter aux favoris</button>
-            <button id="copy-plan" type="button" class="btn btn-light">Copier le plan</button>
-            <button id="export-plan" type="button" class="btn btn-light">Exporter JSON</button>
-            <button id="import-plan" type="button" class="btn btn-light">Importer JSON</button>
+            <button id="copy-plan" type="button" class="btn btn-light">Copier le conseil</button>
             <button id="clear-history" type="button" class="btn btn-light">Vider historique</button>
             <button id="clear-favorites" type="button" class="btn btn-light">Vider favoris</button>
           </div>
-          <input type="file" id="import-file" accept="application/json,.json" style="display: none;" />
+          <p id="data-status" class="feedback">Chargement des donnees economie...</p>
           <p id="feedback" class="feedback" aria-live="polite"></p>
         </section>
       </section>
 
       <section class="panel">
-        <h2>Recommandation currency</h2>
+        <h2>Conseil methode + currencies</h2>
         <div id="resultat" class="resultat">
-          <p>Remplis le formulaire pour obtenir un plan detaille.</p>
+          <p>Saisis la ligne de craft voulue pour obtenir une recommandation automatique.</p>
         </div>
       </section>
 

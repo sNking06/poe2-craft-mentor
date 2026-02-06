@@ -1,105 +1,188 @@
-﻿const STORAGE_HISTORY = "poe2_craft_history_v2";
-const STORAGE_FAVORITES = "poe2_craft_favorites_v2";
-
-const ECON_SOURCE = {
-  provider: "PoE2DB Economy",
-  realm: "US",
-  date: "2026-02-06",
-  url: "https://poe2db.tw/Economy"
-};
-
-const SEGMENT_NOTES = {
-  Currency: "Base du craft: liquidite forte, reference prix globale.",
-  Fragments: "Utile si ton plan repose sur du farm ciblant boss/maps.",
-  Ritual: "Peut ouvrir des alternatives low-cost selon l'offre du moment.",
-  Essences: "Excellent pour du craft semi-deterministe a budget controle.",
-  Breach: "Segment plus volatil, interessant pour opportunites ponctuelles.",
-  Delirium: "Souvent rentable pour composants specs et scaling endgame.",
-  Expedition: "Bon levier pour acquisition de devises/craft mats.",
-  Runes: "Segment niche, verifier volume avant gros investissement.",
-  "Soul Cores": "Niche et volatil: garder une taille de position limitee.",
-  Idols: "Marche opportuniste, utile surtout en optimisation fine.",
-  "Uncut Gems": "Impact direct build power, arbitrage entre craft et achat.",
-  Abyss: "Peut fournir des options cout-efficaces selon meta.",
-  Gems: "Comparer cout craft vs achat direct est souvent gagnant.",
-  Incursion: "Segment situationnel, verifier profondeur du marche."
-};
-
-const ECON = {
-  "Divine Orb": { chaos: 42.4, trend7d: -2, volume24h: 528762 },
-  "Chaos Orb": { chaos: 1, trend7d: 2, volume24h: 22396893 },
-  "Exalted Orb": { chaos: 0.12, trend7d: -9, volume24h: 2764512 },
-  "Orb of Alchemy": { chaos: 0.1, trend7d: 11, volume24h: 5750684 },
-  "Regal Orb": { chaos: 0.1, trend7d: 11, volume24h: 4118094 },
-  "Orb of Annulment": { chaos: 1, trend7d: -2, volume24h: 364443 },
-  "Vaal Orb": { chaos: 1, trend7d: 6, volume24h: 496723 },
-  "Gemcutter's Prism": { chaos: 1, trend7d: -20, volume24h: 1393253 },
-  "Artificer's Orb": { chaos: 1, trend7d: 10, volume24h: 654993 },
-  "Greater Exalted Orb": { chaos: 1, trend7d: -17, volume24h: 211080 },
-  "Greater Regal Orb": { chaos: 1.33, trend7d: 13, volume24h: 469055 },
-  "Lesser Jeweller's Orb": { chaos: 0.1, trend7d: -5, volume24h: 2972274 },
-  "Greater Jeweller's Orb": { chaos: 0.1, trend7d: -5, volume24h: 2367689 },
-  "Perfect Jeweller's Orb": { chaos: 1, trend7d: -15, volume24h: 423728 },
-  "Fracturing Orb": { chaos: 34, trend7d: 36, volume24h: 100578 },
-  "Mirror of Kalandra": { chaos: 9558, trend7d: 1, volume24h: 327 }
-};
+﻿const STORAGE_HISTORY = "poe2_reco_history_v1";
+const STORAGE_FAVORITES = "poe2_reco_favorites_v1";
+const ECONOMY_PATH = "./data/economy.json";
 
 const form = document.getElementById("craft-form");
+const submitButton = document.getElementById("submit-button");
 const resultat = document.getElementById("resultat");
 const historique = document.getElementById("historique");
 const favoris = document.getElementById("favoris");
 const guideContent = document.getElementById("guide-content");
 const feedback = document.getElementById("feedback");
+const dataStatus = document.getElementById("data-status");
 
 const saveFavoriteButton = document.getElementById("save-favorite");
 const copyPlanButton = document.getElementById("copy-plan");
 const clearHistoryButton = document.getElementById("clear-history");
 const clearFavoritesButton = document.getElementById("clear-favorites");
 
-let latestPlan = null;
+let latestRecommendation = null;
+let economy = null;
 
-const slotComplexity = {
-  arme: 1.35,
-  casque: 1.05,
-  armure: 1.2,
-  gants: 1,
-  bottes: 1,
-  ceinture: 0.95,
-  anneau: 1.15,
-  amulette: 1.25
+const SLOT_MULTIPLIER = {
+  arme: 1.15,
+  casque: 1.0,
+  armure: 1.1,
+  gants: 0.95,
+  bottes: 0.95,
+  ceinture: 0.9,
+  anneau: 1.05,
+  amulette: 1.1
 };
 
-const baseChecklist = [
-  "Choisir une base adaptee au build et au slot.",
-  "Verifier l'item level minimum des mods cibles.",
-  "Mettre la qualite avant les etapes couteuses.",
-  "Fixer 2 a 3 mods prioritaires maximum.",
-  "Definir une limite de budget claire avant de commencer."
+const METHOD_PROFILES = {
+  essence: {
+    key: "essence",
+    label: "Essence craft",
+    shortWhy: "Tres bon pour sortir rapidement des lignes utiles et stables.",
+    fitTags: ["defense", "resist", "speed", "damage"],
+    riskFit: { safe: 92, equilibre: 80, agressif: 62 },
+    baseCurrencies: [
+      { name: "Essence of the Body", units: 8, reason: "Bonne base pour des prefixes defensifs." },
+      { name: "Essence of Flames", units: 6, reason: "Permet de pousser des lignes offense elementaires." },
+      { name: "Regal Orb", units: 12, reason: "Stabilise les etapes intermediaires." },
+      { name: "Chaos Orb", units: 36, reason: "Reroll flexible a cout maitrise." }
+    ]
+  },
+  annul_exalt: {
+    key: "annul_exalt",
+    label: "Annul / Exalt",
+    shortWhy: "Approche haut de gamme pour viser des lignes precises.",
+    fitTags: ["crit", "damage", "spell", "minion"],
+    riskFit: { safe: 48, equilibre: 82, agressif: 93 },
+    baseCurrencies: [
+      { name: "Orb of Annulment", units: 8, reason: "Retire une ligne pour nettoyer l'item." },
+      { name: "Exalted Orb", units: 42, reason: "Ajoute des lignes sur une base deja preparee." },
+      { name: "Regal Orb", units: 16, reason: "Passage magic -> rare dans le plan." },
+      { name: "Divine Orb", units: 2, reason: "Finalise les valeurs de lignes importantes." }
+    ]
+  },
+  chaos_spam: {
+    key: "chaos_spam",
+    label: "Chaos spam",
+    shortWhy: "Simple a executer, utile pour obtenir une base jouable vite.",
+    fitTags: ["damage", "resist", "defense"],
+    riskFit: { safe: 70, equilibre: 78, agressif: 65 },
+    baseCurrencies: [
+      { name: "Chaos Orb", units: 140, reason: "Source principale de reroll." },
+      { name: "Regal Orb", units: 6, reason: "Verrouille une base acceptable." },
+      { name: "Orb of Alchemy", units: 24, reason: "Option economique de transition." }
+    ]
+  },
+  vaal_finish: {
+    key: "vaal_finish",
+    label: "Vaal finish",
+    shortWhy: "Finition agressive quand la base est deja forte.",
+    fitTags: ["damage", "crit", "corruption"],
+    riskFit: { safe: 28, equilibre: 64, agressif: 90 },
+    baseCurrencies: [
+      { name: "Vaal Orb", units: 40, reason: "Corruption finale pour push l'item." },
+      { name: "Gemcutter's Prism", units: 14, reason: "Soutient les lignes liees aux gems." },
+      { name: "Chaos Orb", units: 26, reason: "Ajustements avant corruption." }
+    ]
+  },
+  fracture_setup: {
+    key: "fracture_setup",
+    label: "Fracture setup",
+    shortWhy: "Meilleure option pour verrouiller une ligne premium.",
+    fitTags: ["crit", "damage", "spell", "minion", "fracture"],
+    riskFit: { safe: 20, equilibre: 61, agressif: 95 },
+    baseCurrencies: [
+      { name: "Fracturing Orb", units: 1, reason: "Verrouille une ligne clef pour le craft." },
+      { name: "Orb of Annulment", units: 10, reason: "Nettoie avant tentative de fracture." },
+      { name: "Exalted Orb", units: 38, reason: "Remplit les trous apres verrouillage." },
+      { name: "Divine Orb", units: 2, reason: "Optimise la ligne fracturee." }
+    ]
+  },
+  budget_progressif: {
+    key: "budget_progressif",
+    label: "Budget progressif",
+    shortWhy: "Approche recommandee quand le budget est limite.",
+    fitTags: ["defense", "resist", "speed", "budget"],
+    riskFit: { safe: 95, equilibre: 84, agressif: 50 },
+    baseCurrencies: [
+      { name: "Chaos Orb", units: 52, reason: "Budget principal pour reroll." },
+      { name: "Orb of Alchemy", units: 64, reason: "Conversion economique des bases." },
+      { name: "Regal Orb", units: 8, reason: "Verrouille une base jouable." },
+      { name: "Lesser Jeweller's Orb", units: 44, reason: "Ajuste les sockets a faible cout." }
+    ]
+  }
+};
+
+const TAG_KEYWORDS = {
+  damage: ["damage", "degat", "dps", "attack", "caster", "spell", "ele", "element", "phys", "chaos"],
+  defense: ["life", "vie", "armour", "armor", "evasion", "es", "energy shield", "tank", "defense"],
+  resist: ["res", "resist", "resistance", "all res", "cap res"],
+  speed: ["speed", "movement", "ms", "cast speed", "attack speed"],
+  crit: ["crit", "critical", "multi", "crit chance", "crit multi"],
+  minion: ["minion", "summon", "spectre", "zombie"],
+  spell: ["spell", "cast", "gem level", "+level"],
+  fracture: ["fracture", "fracturing", "locked line", "line lock"],
+  corruption: ["corrupt", "corruption", "vaal"],
+  budget: ["cheap", "low cost", "pas cher", "budget"]
+};
+
+const METHOD_HINTS = [
+  { method: "fracture_setup", regex: /(fracture|fracturing|line lock|locked line)/ },
+  { method: "vaal_finish", regex: /(vaal|corrupt|corruption)/ },
+  { method: "annul_exalt", regex: /(annul|exalt|prefix|suffix|meta craft)/ },
+  { method: "chaos_spam", regex: /(chaos spam|reroll|spam)/ },
+  { method: "budget_progressif", regex: /(pas cher|budget|low cost|cheap)/ }
 ];
 
-const damageMods = {
-  physique: ["% Physical Damage", "Adds Physical Damage", "% Attack Speed", "% Critical Chance", "% Critical Multiplier"],
-  foudre: ["Adds Lightning Damage", "% Lightning Damage", "Shock Effect", "% Cast/Attack Speed", "% Critical Chance"],
-  feu: ["Adds Fire Damage", "% Fire Damage", "Ignite Effect", "% Cast/Attack Speed", "% Critical Chance"],
-  froid: ["Adds Cold Damage", "% Cold Damage", "Freeze/Chill Effect", "% Cast/Attack Speed", "% Critical Chance"],
-  chaos: ["Adds Chaos Damage", "% Chaos Damage", "Damage over Time Multiplier", "% Cast/Attack Speed", "Resistance Penetration"],
-  minions: ["+ Minion Levels", "% Minion Damage", "% Minion Attack/Cast Speed", "Minion Life", "Aura/Buff Effect"],
-  mixte: ["% Global Damage", "% Cast/Attack Speed", "% Critical Chance", "% Critical Multiplier", "Utility Mod"]
+const FALLBACK_ECONOMY = {
+  source: { provider: "fallback", page: "local", realm: "US" },
+  fetchedAt: null,
+  divineReference: "divine",
+  rates: {
+    chaos: 1,
+    divine: 43,
+    exalted: 0.12,
+    annul: 6,
+    vaal: 0.2,
+    alch: 0.1,
+    regal: 0.00055,
+    gcp: 0.9,
+    "fracturing-orb": 1500,
+    "lesser-jewellers-orb": 0.00038
+  },
+  segments: [
+    {
+      id: "Currency",
+      rows: [
+        { name: "Chaos Orb", slug: "chaos", trend7dPct: 0, volume24h: 1000000, chaosValue: 1 },
+        { name: "Divine Orb", slug: "divine", trend7dPct: 0, volume24h: 600000, chaosValue: 43 },
+        { name: "Exalted Orb", slug: "exalted", trend7dPct: -5, volume24h: 500000, chaosValue: 0.12 },
+        { name: "Orb of Annulment", slug: "annul", trend7dPct: 3, volume24h: 120000, chaosValue: 6 },
+        { name: "Vaal Orb", slug: "vaal", trend7dPct: 2, volume24h: 170000, chaosValue: 0.2 },
+        { name: "Orb of Alchemy", slug: "alch", trend7dPct: 1, volume24h: 800000, chaosValue: 0.1 },
+        { name: "Regal Orb", slug: "regal", trend7dPct: 4, volume24h: 350000, chaosValue: 0.00055 },
+        { name: "Gemcutter's Prism", slug: "gcp", trend7dPct: -3, volume24h: 210000, chaosValue: 0.9 },
+        { name: "Fracturing Orb", slug: "fracturing-orb", trend7dPct: 22, volume24h: 25000, chaosValue: 1500 },
+        { name: "Lesser Jeweller's Orb", slug: "lesser-jewellers-orb", trend7dPct: -6, volume24h: 300000, chaosValue: 0.00038 }
+      ]
+    },
+    {
+      id: "Essences",
+      rows: [
+        { name: "Essence of the Body", slug: "essence-of-the-body", trend7dPct: -4, volume24h: 12000, chaosValue: 0.4 },
+        { name: "Essence of Flames", slug: "essence-of-flames", trend7dPct: 6, volume24h: 12000, chaosValue: 22 }
+      ]
+    }
+  ]
 };
 
-const slotDefensiveMods = {
-  casque: ["Life/ES", "Resistances", "Attribute Need", "Defensive Base Value", "Utility Prefix"],
-  armure: ["High Life/ES", "Core Resistances", "Damage Mitigation", "Recovery", "Build Utility"],
-  gants: ["Life/ES", "Resistances", "Attack/Cast Utility", "Suppression/Block", "Attribute Need"],
-  bottes: ["Movement Speed", "Life/ES", "Resistances", "Avoidance", "Utility Mod"],
-  ceinture: ["High Life", "Resistances", "Flask/Recovery Utility", "Armor/ES", "Attribute Need"],
-  anneau: ["Resistances", "Life/ES", "Damage Utility", "Mana Sustain", "Attribute Need"],
-  amulette: ["+ Skills/Levels", "Life/ES", "Resistances", "Damage Utility", "Attribute Need"],
-  arme: ["Defense Through Offense", "Sustain Utility", "Crit/Leech Utility", "Speed", "Optional Resist"]
-};
+function normalizeText(text) {
+  return String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
 
-function setFeedback(message) {
+function setFeedback(message, isError = false) {
   feedback.textContent = message;
+  feedback.className = isError ? "feedback feedback-error" : "feedback feedback-success";
 }
 
 function readJson(key) {
@@ -114,487 +197,451 @@ function writeJson(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-function getRiskFactor(risk) {
-  if (risk === "safe") return 0.7;
-  if (risk === "equilibre") return 1;
-  return 1.3;
+function toNumber(value, fallback = 0) {
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
-function getStageFactor(stage) {
-  if (stage === "leveling") return 0.7;
-  if (stage === "midgame") return 1;
-  return 1.2;
-}
+function buildEconomyIndex(raw) {
+  const rows = (raw.segments || []).flatMap((segment) => segment.rows || []);
+  const byName = new Map();
+  const bySlug = new Map();
 
-function pickPriorityMods({ slot, objectif, damageType }) {
-  if (objectif === "degats") return damageMods[damageType];
-  if (objectif === "resistances") return ["All Resistances", "Single High Resist", "Life/ES", "Attribute Need", "Utility Suffix"];
-  if (objectif === "mobilite") return ["Movement/Action Speed", "Utility Trigger", "Life/ES", "Resistances", "QoL Mod"];
-  return slotDefensiveMods[slot];
-}
-
-function buildChecklist(data) {
-  const list = [...baseChecklist];
-  if (Number(data.ilvl) < 70) list.push("Alerte: ilvl potentiellement trop bas pour certains mods endgame.");
-  if (data.mode === "debutant") list.push("Mode debutant: viser d'abord un item stable et jouable.");
-  if (Number(data.budgetDiv) <= 3) list.push("Budget serre: eviter les tentatives a forte variance.");
-  if (Number(data.budgetDiv) >= 50) list.push("Budget eleve: planifier une version stable puis une version push.");
-  return list;
-}
-
-function buildSteps(data, strategy) {
-  const steps = [
-    "Etape 1: Base correcte + item level valide + qualite appliquee.",
-    "Etape 2: Obtenir les priorites 1 et 2 avant toute optimisation secondaire.",
-    "Etape 3: Stabiliser prefixes/suffixes et corriger les manques critiques.",
-    "Etape 4: Ajouter les priorites 3 a 5 selon le budget restant.",
-    "Etape 5: Tester en contenu reel puis ajuster si le gain est marginal."
-  ];
-
-  if (data.mode === "debutant") {
-    steps.push("Regle debutant: arreter apres 2 echecs couteux consecutifs.");
-  } else {
-    steps.push("Regle avance: preparer un rollback (plan B) avant les etapes risquees.");
+  for (const row of rows) {
+    if (!row || !row.name || !row.slug) continue;
+    const key = normalizeText(row.name);
+    if (!byName.has(key)) byName.set(key, row);
+    bySlug.set(String(row.slug).toLowerCase(), row);
   }
 
-  if (strategy.decision === "FARM") {
-    steps.unshift("Etape 0: Monter le budget cible avant craft (farm + achats fractionnes).");
-  }
-  if (strategy.decision === "WAIT") {
-    steps.unshift("Etape 0: Attendre un meilleur timing prix/liquidite avant gros achat.");
-  }
-  if (strategy.decision === "GO") {
-    steps.unshift("Etape 0: Verrouiller les ressources du panier maintenant.");
-  }
+  const divineRef = String(raw.divineReference || "divine").toLowerCase();
+  const divineChaos = raw.rates && raw.rates[divineRef] ? raw.rates[divineRef] : (bySlug.get(divineRef)?.chaosValue || 43);
 
-  return steps;
-}
-
-function computeScores(data, priorities) {
-  const budget = Number(data.budgetDiv);
-  const complexity = slotComplexity[data.slot] * (data.objectif === "degats" ? 1.2 : 1);
-  const stage = getStageFactor(data.stade);
-  const risk = getRiskFactor(data.risque);
-
-  const budgetPower = Math.min(100, 35 + Math.log10(budget + 1) * 28);
-  const power = Math.round(Math.max(10, Math.min(100, budgetPower + priorities.length * 4 + stage * 10 - complexity * 8)));
-  const riskScore = Math.round(Math.max(5, Math.min(100, 35 + risk * complexity * 22 - (data.mode === "debutant" ? 8 : 0))));
-  const costPressure = Math.round(Math.max(5, Math.min(100, 25 + complexity * 22 + risk * 12 + stage * 8 - Math.min(25, budget * 0.5))));
-
-  return { power, riskScore, costPressure };
-}
-
-function scoreClass(value) {
-  if (value <= 35) return "score-ok";
-  if (value <= 65) return "score-mid";
-  return "score-bad";
-}
-
-function formatTitle(data) {
-  return `${data.slot} | ${data.objectif} | ${data.damageType} | ${data.craftMethod} | ${data.budgetDiv} div`;
-}
-
-function buildCurrencyBasket(data) {
-  const baseBasket = [
-    { name: "Chaos Orb", units: 40 },
-    { name: "Orb of Annulment", units: 2 },
-    { name: "Regal Orb", units: 20 },
-    { name: "Exalted Orb", units: 40 },
-    { name: "Orb of Alchemy", units: 30 }
-  ];
-
-  const methodBasket = {
-    essence: [
-      { name: "Chaos Orb", units: 60 },
-      { name: "Orb of Alchemy", units: 60 },
-      { name: "Regal Orb", units: 24 }
-    ],
-    annul_exalt: [
-      { name: "Orb of Annulment", units: 10 },
-      { name: "Exalted Orb", units: 120 },
-      { name: "Regal Orb", units: 40 }
-    ],
-    chaos_spam: [
-      { name: "Chaos Orb", units: 220 },
-      { name: "Regal Orb", units: 10 }
-    ],
-    vaal_finish: [
-      { name: "Vaal Orb", units: 80 },
-      { name: "Chaos Orb", units: 60 },
-      { name: "Regal Orb", units: 16 }
-    ],
-    fracture_setup: [
-      { name: "Fracturing Orb", units: 2 },
-      { name: "Orb of Annulment", units: 8 },
-      { name: "Exalted Orb", units: 80 }
-    ],
-    budget_progressif: [
-      { name: "Chaos Orb", units: 80 },
-      { name: "Orb of Alchemy", units: 100 },
-      { name: "Regal Orb", units: 18 },
-      { name: "Lesser Jeweller's Orb", units: 90 }
-    ]
+  return {
+    source: raw.source || { provider: "unknown", page: "", realm: "US" },
+    fetchedAt: raw.fetchedAt || null,
+    rates: raw.rates || {},
+    byName,
+    bySlug,
+    divineChaos,
+    rowCount: rows.length
   };
-
-  const basket = [...baseBasket, ...(methodBasket[data.craftMethod] || [])];
-
-  if (data.objectif === "degats" || data.craftMethod === "vaal_finish") {
-    basket.push({ name: "Vaal Orb", units: 20 });
-    basket.push({ name: "Gemcutter's Prism", units: 14 });
-  }
-  if (data.objectif === "survie") basket.push({ name: "Artificer's Orb", units: 12 });
-  if (data.objectif === "mobilite") basket.push({ name: "Greater Regal Orb", units: 6 });
-  if (data.risque === "agressif" || data.craftMethod === "fracture_setup") {
-    basket.push({ name: "Fracturing Orb", units: 1 });
-  }
-
-  const merged = Object.values(
-    basket.reduce((acc, row) => {
-      if (!acc[row.name]) acc[row.name] = { ...row };
-      else acc[row.name].units += row.units;
-      return acc;
-    }, {})
-  );
-
-  if (data.mode === "debutant") return merged.filter((c) => c.name !== "Fracturing Orb");
-
-  return merged;
 }
 
-function buildEconomyInsight(data) {
-  const divChaos = ECON["Divine Orb"].chaos;
-  const basket = buildCurrencyBasket(data);
-  const complexity = slotComplexity[data.slot];
-  const stageFactor = getStageFactor(data.stade);
+function getEconomyRowByName(name) {
+  if (!economy) return null;
+  return economy.byName.get(normalizeText(name)) || null;
+}
 
-  const adjusted = basket.map((item) => {
-    const econ = ECON[item.name];
-    const units = Math.max(1, Math.round(item.units * complexity * stageFactor * 0.35));
-    const chaosCost = econ ? units * econ.chaos : 0;
-    return {
+function getChaosValueForCurrency(name) {
+  const row = getEconomyRowByName(name);
+  if (row && Number.isFinite(row.chaosValue) && row.chaosValue > 0) {
+    return row.chaosValue;
+  }
+
+  const slug = row ? String(row.slug).toLowerCase() : "";
+  if (slug && economy?.rates?.[slug]) return economy.rates[slug];
+
+  return null;
+}
+
+function parseDesiredLines(rawText) {
+  return String(rawText || "")
+    .split(/[\n,;]+/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+function inferIntent(desiredLinesText) {
+  const normalized = normalizeText(desiredLinesText);
+  const lines = parseDesiredLines(desiredLinesText);
+  const tags = new Set();
+
+  for (const [tag, words] of Object.entries(TAG_KEYWORDS)) {
+    if (words.some((word) => normalized.includes(word))) {
+      tags.add(tag);
+    }
+  }
+
+  let forcedMethod = null;
+  for (const hint of METHOD_HINTS) {
+    if (hint.regex.test(normalized)) {
+      forcedMethod = hint.method;
+      break;
+    }
+  }
+
+  const complexity = Math.max(1, Math.min(3, lines.length + Math.floor(tags.size / 3)));
+
+  return {
+    lines,
+    tags,
+    forcedMethod,
+    complexity
+  };
+}
+
+function tagFitScore(profile, intent) {
+  const fitSet = new Set(profile.fitTags);
+  let hits = 0;
+  intent.tags.forEach((tag) => {
+    if (fitSet.has(tag)) hits += 1;
+  });
+
+  const base = 35;
+  const ratio = profile.fitTags.length ? hits / profile.fitTags.length : 0;
+  let score = base + ratio * 65;
+
+  if (intent.forcedMethod && intent.forcedMethod === profile.key) {
+    score += 25;
+  }
+
+  return Math.min(100, score);
+}
+
+function riskFitScore(profile, risk) {
+  return profile.riskFit[risk] ?? 70;
+}
+
+function scoreCurrency(currency, methodProfile, intent) {
+  let score = 55;
+
+  if (currency.trend7dPct <= -10) score += 15;
+  else if (currency.trend7dPct <= 0) score += 9;
+  else if (currency.trend7dPct >= 15) score -= 12;
+  else if (currency.trend7dPct >= 8) score -= 7;
+
+  if (currency.volume24h >= 500000) score += 12;
+  else if (currency.volume24h >= 100000) score += 8;
+  else if (currency.volume24h < 20000) score -= 10;
+
+  if (intent.tags.has("budget") && currency.chaosValue > 50) score -= 10;
+  if (methodProfile.key === "fracture_setup" && currency.name === "Fracturing Orb") score += 14;
+  if (methodProfile.key === "essence" && currency.name.startsWith("Essence")) score += 10;
+
+  return Math.max(1, Math.min(99, Math.round(score)));
+}
+
+function buildCurrencyPlan(methodProfile, intent, formData) {
+  const slotMult = SLOT_MULTIPLIER[formData.slot] || 1;
+  const result = [];
+
+  for (const item of methodProfile.baseCurrencies) {
+    const row = getEconomyRowByName(item.name);
+    const chaosValue = getChaosValueForCurrency(item.name);
+    if (!chaosValue) continue;
+
+    const trend = row?.trend7dPct ?? 0;
+    const volume = row?.volume24h ?? 0;
+
+    const units = Math.max(1, Math.round(item.units * intent.complexity * slotMult));
+    const totalChaos = units * chaosValue;
+    const totalDiv = totalChaos / economy.divineChaos;
+
+    const scored = {
       name: item.name,
       units,
-      chaosCost,
-      trend7d: econ ? econ.trend7d : 0,
-      volume24h: econ ? econ.volume24h : 0
+      chaosValue,
+      totalChaos,
+      totalDiv,
+      trend7dPct: trend,
+      volume24h: volume,
+      reason: item.reason,
+      score: 0
     };
-  });
 
-  const totalChaos = adjusted.reduce((sum, item) => sum + item.chaosCost, 0);
-  const totalDiv = totalChaos / divChaos;
-
-  const weightedTrend = adjusted.reduce((sum, item) => sum + item.trend7d * (item.chaosCost || 1), 0) / Math.max(1, totalChaos);
-  const weightedVolume = adjusted.reduce((sum, item) => sum + item.volume24h, 0) / Math.max(1, adjusted.length);
-
-  const buyNow = adjusted.filter((item) => item.trend7d <= -10).map((item) => item.name);
-  const expensiveNow = adjusted.filter((item) => item.trend7d >= 10).map((item) => item.name);
-  const lowLiquidity = adjusted.filter((item) => item.volume24h < 150000).map((item) => item.name);
-
-  const budgetDiv = Number(data.budgetDiv);
-  const budgetStatus = budgetDiv >= totalDiv ? "ok" : "short";
-
-  return {
-    segment: data.segment,
-    segmentNote: SEGMENT_NOTES[data.segment],
-    source: ECON_SOURCE,
-    basket: adjusted,
-    totalChaos,
-    totalDiv,
-    weightedTrend,
-    weightedVolume,
-    buyNow,
-    expensiveNow,
-    lowLiquidity,
-    budgetStatus
-  };
-}
-
-function chooseEconomyStrategy(data, economy) {
-  const budgetDiv = Number(data.budgetDiv);
-  const affordability = budgetDiv / Math.max(0.1, economy.totalDiv);
-  const trend = economy.weightedTrend;
-  const illiquidCount = economy.lowLiquidity.length;
-
-  let decision = "GO";
-  let craftStyle = "Deterministe";
-  let notes = "L'economie permet de lancer le craft immediatement.";
-
-  if (affordability < 0.8) {
-    decision = "FARM";
-    craftStyle = "Low-cost incremental";
-    notes = "Ton budget est trop court: farm/achat progressif avant craft complet.";
-  } else if (trend > 8 || illiquidCount >= 2) {
-    decision = "WAIT";
-    craftStyle = "Timing market";
-    notes = "Marche tendu: attends un meilleur point d'entree ou craft en petite taille.";
-  } else if (affordability >= 1.6 && data.risque === "agressif") {
-    decision = "GO";
-    craftStyle = "Push high variance";
-    notes = "Budget confortable: tu peux tenter une ligne plus agressive.";
+    scored.score = scoreCurrency(scored, methodProfile, intent);
+    result.push(scored);
   }
 
-  const planBudget = {
-    acquisition: Math.max(0, Math.round(budgetDiv * 0.45 * 100) / 100),
-    crafting: Math.max(0, Math.round(budgetDiv * 0.4 * 100) / 100),
-    reserve: Math.max(0, Math.round(budgetDiv * 0.15 * 100) / 100)
-  };
+  return result.sort((a, b) => b.score - a.score);
+}
+
+function budgetFitScore(budgetDiv, estimatedDiv) {
+  const safeEstimated = Math.max(0.1, estimatedDiv);
+  const ratio = budgetDiv / safeEstimated;
+
+  if (ratio >= 1) {
+    return Math.min(100, 85 + (ratio - 1) * 20);
+  }
+
+  return Math.max(5, ratio * 85);
+}
+
+function economyHealthScore(currencies) {
+  if (!currencies.length) return 0;
+  return currencies.reduce((sum, row) => sum + row.score, 0) / currencies.length;
+}
+
+function evaluateMethod(profile, intent, formData) {
+  const currencies = buildCurrencyPlan(profile, intent, formData);
+  const estimatedChaos = currencies.reduce((sum, row) => sum + row.totalChaos, 0);
+  const estimatedDiv = estimatedChaos / economy.divineChaos;
+  const budgetDiv = toNumber(formData.budgetDiv, 0);
+
+  const tagScore = tagFitScore(profile, intent);
+  const riskScore = riskFitScore(profile, formData.risque);
+  const budgetScore = budgetFitScore(budgetDiv, estimatedDiv);
+  const ecoScore = economyHealthScore(currencies);
+
+  const methodScore = Math.round(tagScore * 0.4 + budgetScore * 0.35 + riskScore * 0.15 + ecoScore * 0.1);
 
   return {
-    decision,
-    craftStyle,
-    notes,
-    affordability,
-    planBudget
+    profile,
+    methodScore,
+    tagScore,
+    riskScore,
+    budgetScore,
+    ecoScore,
+    estimatedChaos,
+    estimatedDiv,
+    budgetRatio: budgetDiv / Math.max(0.1, estimatedDiv),
+    currencies
   };
 }
 
-function buildCurrencyAdvice(data, economy, strategy) {
-  const objectiveBoost = {
-    degats: new Set(["Vaal Orb", "Gemcutter's Prism", "Exalted Orb"]),
-    survie: new Set(["Artificer's Orb", "Regal Orb", "Orb of Annulment"]),
-    resistances: new Set(["Regal Orb", "Orb of Alchemy", "Chaos Orb"]),
-    mobilite: new Set(["Greater Regal Orb", "Regal Orb", "Chaos Orb"])
-  };
+function buildPlanSteps(bestEval, intent) {
+  const linesText = intent.lines.length ? intent.lines.join(", ") : "tes lignes";
+  const method = bestEval.profile.label;
 
-  const boosted = objectiveBoost[data.objectif] || new Set();
-  const methodBoost = {
-    essence: new Set(["Chaos Orb", "Orb of Alchemy", "Regal Orb"]),
-    annul_exalt: new Set(["Orb of Annulment", "Exalted Orb", "Regal Orb"]),
-    chaos_spam: new Set(["Chaos Orb"]),
-    vaal_finish: new Set(["Vaal Orb", "Gemcutter's Prism"]),
-    fracture_setup: new Set(["Fracturing Orb", "Orb of Annulment", "Exalted Orb"]),
-    budget_progressif: new Set(["Chaos Orb", "Orb of Alchemy", "Lesser Jeweller's Orb"])
-  };
-  const methoded = methodBoost[data.craftMethod] || new Set();
-
-  const scored = economy.basket.map((item) => {
-    const trendBonus = item.trend7d <= -10 ? 18 : item.trend7d <= -3 ? 10 : item.trend7d >= 10 ? -16 : 0;
-    const liquidityBonus = item.volume24h >= 1000000 ? 12 : item.volume24h >= 250000 ? 6 : -10;
-    const affordabilityBonus = item.chaosCost <= economy.totalChaos * 0.22 ? 9 : -4;
-    const objectiveBonus = boosted.has(item.name) ? 12 : 0;
-    const methodBonus = methoded.has(item.name) ? 16 : 0;
-    const riskPenalty = data.risque === "safe" && item.name === "Fracturing Orb" ? -40 : 0;
-    const methodPenalty = data.craftMethod === "budget_progressif" && item.chaosCost > economy.totalChaos * 0.25 ? -14 : 0;
-    const strategyBonus = strategy.decision === "FARM" && item.chaosCost <= economy.totalChaos * 0.12 ? 8 : 0;
-    const score = 50 + trendBonus + liquidityBonus + affordabilityBonus + objectiveBonus + methodBonus + riskPenalty + methodPenalty + strategyBonus;
-
-    let reason = "Bon compromis cout/liquidite.";
-    if (item.trend7d <= -10) reason = "Prix en baisse: fenetre d'achat interessante.";
-    if (item.volume24h < 150000) reason = "Liquidite faible: execution plus difficile.";
-    if (boosted.has(item.name)) reason = "Fort impact pour ton objectif de craft.";
-    if (methoded.has(item.name)) reason = "Currency clef pour la methode de craft selectionnee.";
-    if (data.risque === "safe" && item.name === "Fracturing Orb") reason = "Trop risquee pour mode safe.";
-
-    return { ...item, score, reason };
-  });
-
-  const sorted = scored.sort((a, b) => b.score - a.score);
-  const recommended = sorted.slice(0, 5);
-  const avoid = sorted.filter((c) => c.score < 45).slice(0, 3);
-  return { recommended, avoid };
+  return [
+    `1. Prepare une base propre pour ${linesText}.`,
+    `2. Lance la methode ${method}.`,
+    `3. Priorise les 2 premieres currencies conseillees avant le reste.`,
+    "4. Arrete les tentatives si tu depasses ton budget reserve.",
+    "5. Finalise les rolls uniquement si l'item est deja jouable."
+  ];
 }
 
-function planToText(plan) {
-  const header = `Plan Craft - ${formatTitle(plan.data)} (${new Date().toLocaleString("fr-FR")})`;
-  const priorities = plan.priorities.map((m, i) => `P${i + 1}: ${m}`).join("\n");
-  const checklist = plan.checklist.map((c) => `- ${c}`).join("\n");
-  const steps = plan.steps.map((s) => `- ${s}`).join("\n");
-  const eco = `Cout estime: ${plan.economy.totalChaos.toFixed(1)} chaos (${plan.economy.totalDiv.toFixed(2)} div) | Segment: ${plan.economy.segment} | Decision: ${plan.strategy.decision}`;
-  const currencies = plan.currencyAdvice.recommended
-    .map((c, i) => `${i + 1}. ${c.name} (${Math.round(c.score)}/100) - ${c.reason}`)
-    .join("\n");
+function buildRecommendation(formData) {
+  const intent = inferIntent(formData.desiredLines);
+  const evaluations = Object.values(METHOD_PROFILES).map((profile) => evaluateMethod(profile, intent, formData));
+  evaluations.sort((a, b) => b.methodScore - a.methodScore);
 
-  return `${header}\n\n${eco}\n\nCurrencies recommandees:\n${currencies}\n\nChecklist:\n${checklist}\n\nPriorites:\n${priorities}\n\nPlan:\n${steps}`;
+  const best = evaluations[0];
+  const alternative = evaluations[1] || null;
+
+  return {
+    formData,
+    intent,
+    best,
+    alternative,
+    steps: buildPlanSteps(best, intent)
+  };
 }
 
-function renderPlan(plan) {
-  const priorities = plan.priorities.map((mod, i) => `<li>P${i + 1} - ${mod}</li>`).join("");
-  const checklist = plan.checklist.map((item) => `<li>${item}</li>`).join("");
-  const steps = plan.steps.map((step) => `<li>${step}</li>`).join("");
-  const ecoRows = plan.economy.basket
-    .map((item) => `<li>${item.name}: ${item.units}u (~${item.chaosCost.toFixed(1)} chaos, trend 7j ${item.trend7d > 0 ? "+" : ""}${item.trend7d}%)</li>`)
-    .join("");
+function recommendationTitle(reco) {
+  return `${reco.best.profile.label} | ${toNumber(reco.formData.budgetDiv).toFixed(1)} div | ${reco.formData.slot}`;
+}
 
-  const budgetChip = plan.economy.budgetStatus === "ok"
-    ? `<span class="tag">Budget suffisant</span>`
-    : `<span class="tag">Budget insuffisant</span>`;
+function toTrendLabel(value) {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${Math.round(value)}%`;
+}
 
-  const buyNowText = plan.economy.buyNow.length ? plan.economy.buyNow.join(", ") : "Aucun signal fort";
-  const expensiveText = plan.economy.expensiveNow.length ? plan.economy.expensiveNow.join(", ") : "Aucun signal fort";
-  const liquidityText = plan.economy.lowLiquidity.length ? plan.economy.lowLiquidity.join(", ") : "Liquidite correcte";
-  const ratioText = `${plan.strategy.affordability.toFixed(2)}x`;
-  const recoRows = plan.currencyAdvice.recommended
-    .map((item, idx) => `<li>#${idx + 1} ${item.name} - score ${Math.round(item.score)}/100 - ${item.reason} (~${item.chaosCost.toFixed(1)} chaos)</li>`)
-    .join("");
-  const avoidRows = plan.currencyAdvice.avoid.length
-    ? plan.currencyAdvice.avoid.map((item) => `<li>${item.name} - ${item.reason}</li>`).join("")
-    : "<li>Aucune currency majeure a eviter actuellement.</li>";
+function renderRecommendation(reco) {
+  const lines = reco.intent.lines.length ? reco.intent.lines : [reco.formData.desiredLines.trim()];
+  const lineList = lines.map((line) => `<li>${line}</li>`).join("");
+
+  const bestCurrencies = reco.best.currencies.slice(0, 5);
+  const currencyList = bestCurrencies.length
+    ? bestCurrencies
+        .map((currency, index) => {
+          const trendClass = currency.trend7dPct <= 0 ? "score-ok" : "score-mid";
+          return `<li>#${index + 1} <strong>${currency.name}</strong> - ${currency.units}u (~${currency.totalDiv.toFixed(2)} div / ${currency.totalChaos.toFixed(1)} chaos) - <span class="${trendClass}">trend ${toTrendLabel(currency.trend7dPct)}</span> - ${currency.reason}</li>`;
+        })
+        .join("")
+    : "<li>Pas assez de data economie pour cette methode.</li>";
+
+  const stepsList = reco.steps.map((step) => `<li>${step}</li>`).join("");
+  const budgetState = reco.best.budgetRatio >= 1 ? "Budget compatible" : "Budget trop court";
+
+  const altBlock = reco.alternative
+    ? `<p><strong>Alternative:</strong> ${reco.alternative.profile.label} (score ${reco.alternative.methodScore}/100, cout ~${reco.alternative.estimatedDiv.toFixed(2)} div)</p>`
+    : "";
 
   resultat.innerHTML = `
     <div class="card">
-      <p class="tag">${plan.data.mode}</p>
-      <p class="tag">${plan.data.slot}</p>
-      <p class="tag">${plan.data.objectif}</p>
-      <p class="tag">${plan.data.damageType}</p>
-      <p class="tag">${plan.data.segment}</p>
-      <p class="tag">${plan.data.craftMethod}</p>
-      ${budgetChip}
-      <p><strong>Build:</strong> ${plan.data.build || "non precise"} | <strong>Budget:</strong> ${plan.data.budgetDiv} div | <strong>ilvl:</strong> ${plan.data.ilvl}</p>
+      <p class="tag">Methode recommandee</p>
+      <h3>${reco.best.profile.label}</h3>
+      <p>${reco.best.profile.shortWhy}</p>
       <div class="kpi">
-        <span>Puissance: <strong>${plan.scores.power}/100</strong></span>
-        <span class="${scoreClass(plan.scores.riskScore)}">Risque: <strong>${plan.scores.riskScore}/100</strong></span>
-        <span class="${scoreClass(plan.scores.costPressure)}">Pression cout: <strong>${plan.scores.costPressure}/100</strong></span>
+        <span>Score global: <strong>${reco.best.methodScore}/100</strong></span>
+        <span>${budgetState}</span>
+        <span>Cout estime: <strong>${reco.best.estimatedDiv.toFixed(2)} div</strong></span>
       </div>
+      ${altBlock}
     </div>
+
     <div class="card">
-      <h3>Decision economie -> craft</h3>
-      <p><strong>Decision:</strong> ${plan.strategy.decision} | <strong>Style recommande:</strong> ${plan.strategy.craftStyle}</p>
-      <p><strong>Couverture budget / cout:</strong> ${ratioText}</p>
-      <p><strong>Allocation budget:</strong> achat matieres ${plan.strategy.planBudget.acquisition} div, craft ${plan.strategy.planBudget.crafting} div, reserve ${plan.strategy.planBudget.reserve} div</p>
-      <p>${plan.strategy.notes}</p>
+      <h3>Lignes demandees</h3>
+      <ul>${lineList}</ul>
     </div>
+
     <div class="card">
-      <h3>Quelles currencies utiliser</h3>
-      <p>Classement prioritaire pour ce craft:</p>
-      <ul>${recoRows}</ul>
-      <p><strong>A eviter pour l'instant:</strong></p>
-      <ul>${avoidRows}</ul>
+      <h3>Currencies a utiliser (ordre)</h3>
+      <ul>${currencyList}</ul>
     </div>
+
     <div class="card">
-      <h3>Analyse economie (${plan.economy.source.provider} ${plan.economy.source.realm})</h3>
-      <p><strong>Snapshot:</strong> ${plan.economy.source.date} | <a href="${plan.economy.source.url}" target="_blank" rel="noreferrer">source</a></p>
-      <p><strong>Segment:</strong> ${plan.economy.segment} - ${plan.economy.segmentNote}</p>
-      <p><strong>Cout craft estime:</strong> ${plan.economy.totalChaos.toFixed(1)} chaos (~${plan.economy.totalDiv.toFixed(2)} div)</p>
-      <p><strong>Trend panier (7j):</strong> ${plan.economy.weightedTrend > 0 ? "+" : ""}${plan.economy.weightedTrend.toFixed(1)}% | <strong>Volume moyen:</strong> ${Math.round(plan.economy.weightedVolume).toLocaleString("fr-FR")}/24h</p>
-      <ul>${ecoRows}</ul>
-      <p><strong>Opportunite achat:</strong> ${buyNowText}</p>
-      <p><strong>Surveille (prix en hausse):</strong> ${expensiveText}</p>
-      <p><strong>Risque liquidite:</strong> ${liquidityText}</p>
-    </div>
-    <div class="card">
-      <h3>Checklist avant craft</h3>
-      <ul>${checklist}</ul>
-    </div>
-    <div class="card">
-      <h3>Priorites de mods</h3>
-      <ul>${priorities}</ul>
-    </div>
-    <div class="card">
-      <h3>Plan d'action</h3>
-      <ul>${steps}</ul>
+      <h3>Plan simple</h3>
+      <ul>${stepsList}</ul>
     </div>
   `;
+}
+
+function recommendationToText(reco) {
+  const lines = reco.intent.lines.length ? reco.intent.lines.join(", ") : reco.formData.desiredLines;
+  const currencies = reco.best.currencies
+    .slice(0, 5)
+    .map((currency, i) => `${i + 1}. ${currency.name} - ${currency.units}u (~${currency.totalDiv.toFixed(2)} div) - trend ${toTrendLabel(currency.trend7dPct)}`)
+    .join("\n");
+
+  return [
+    `Objectif: ${lines}`,
+    `Methode: ${reco.best.profile.label}`,
+    `Score: ${reco.best.methodScore}/100`,
+    `Cout estime: ${reco.best.estimatedDiv.toFixed(2)} div (${reco.best.estimatedChaos.toFixed(1)} chaos)`,
+    "",
+    "Currencies recommandees:",
+    currencies
+  ].join("\n");
 }
 
 function renderHistory() {
   const entries = readJson(STORAGE_HISTORY);
   if (!entries.length) {
-    historique.innerHTML = "<li>Aucun craft enregistre.</li>";
+    historique.innerHTML = "<li class='empty-state'>Aucune recommandation enregistree.</li>";
     return;
   }
 
-  historique.innerHTML = entries.map((entry) => `<li><strong>${entry.title}</strong> - ${entry.date}</li>`).join("");
+  historique.innerHTML = entries
+    .map((entry) => `<li><strong>${entry.title}</strong><br><span class='date-label'>${entry.date}</span></li>`)
+    .join("");
 }
 
 function renderFavorites() {
   const entries = readJson(STORAGE_FAVORITES);
   if (!entries.length) {
-    favoris.innerHTML = "<li>Aucun favori pour le moment.</li>";
+    favoris.innerHTML = "<li class='empty-state'>Aucun favori.</li>";
     return;
   }
 
-  favoris.innerHTML = entries.map((entry) => `<li><strong>${entry.title}</strong> - ${entry.date}</li>`).join("");
+  favoris.innerHTML = entries
+    .map((entry) => `<li><strong>${entry.title}</strong><br><span class='date-label'>${entry.date}</span></li>`)
+    .join("");
 }
 
 function renderGuide() {
   guideContent.innerHTML = `
     <div class="card">
-      <h3>Erreurs frequentes</h3>
+      <h3>Comment utiliser l'assistant</h3>
       <ul>
-        <li>Forcer trop de mods parfaits avec un budget insuffisant.</li>
-        <li>Ignorer l'item level minimal des mods cibles.</li>
-        <li>Ne pas fixer de stop-loss craft avant de commencer.</li>
-        <li>Prioriser uniquement les degats et oublier les defenses.</li>
-        <li>Ne pas valider l'item en situation reelle (map/boss).</li>
+        <li>1. Ecris simplement la ligne que tu veux obtenir.</li>
+        <li>2. Indique ton budget.</li>
+        <li>3. Laisse l'app choisir la methode et les currencies.</li>
       </ul>
     </div>
     <div class="card">
-      <h3>Routine economie + craft</h3>
+      <h3>Exemples de saisie</h3>
       <ul>
-        <li>1. Choisir le segment marche principal (Currency, Essences, etc.).</li>
-        <li>2. Verifier trend 7j et volume avant achat massif.</li>
-        <li>3. Construire le panier craft puis comparer au budget div.</li>
-        <li>4. Prioriser les devises en baisse et liquides.</li>
+        <li>"+life, +all resist"</li>
+        <li>"crit chance + crit multi"</li>
+        <li>"+2 minion level"</li>
+        <li>"movement speed + resist"</li>
       </ul>
     </div>
   `;
 }
 
-function storeHistory(plan) {
+function storeHistory(reco) {
   const entries = [
-    { title: `${formatTitle(plan.data)} | ${plan.economy.totalDiv.toFixed(2)} div`, date: new Date().toLocaleString("fr-FR") },
+    {
+      title: recommendationTitle(reco),
+      date: new Date().toLocaleString("fr-FR")
+    },
     ...readJson(STORAGE_HISTORY)
   ].slice(0, 20);
 
   writeJson(STORAGE_HISTORY, entries);
 }
 
-function storeFavorite(plan) {
+function storeFavorite(reco) {
   const entries = [
-    { title: `${formatTitle(plan.data)} | ${plan.economy.totalDiv.toFixed(2)} div`, date: new Date().toLocaleString("fr-FR") },
+    {
+      title: recommendationTitle(reco),
+      date: new Date().toLocaleString("fr-FR")
+    },
     ...readJson(STORAGE_FAVORITES)
   ].slice(0, 20);
 
   writeJson(STORAGE_FAVORITES, entries);
 }
 
-function buildPlan(data) {
-  const priorities = pickPriorityMods(data);
-  const checklist = buildChecklist(data);
-  const scores = computeScores(data, priorities);
-  const economy = buildEconomyInsight(data);
-  const strategy = chooseEconomyStrategy(data, economy);
-  const steps = buildSteps(data, strategy);
-  const currencyAdvice = buildCurrencyAdvice(data, economy, strategy);
+async function loadEconomyData() {
+  try {
+    const response = await fetch(ECONOMY_PATH, { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const payload = await response.json();
+    economy = buildEconomyIndex(payload);
 
-  return { data, priorities, checklist, steps, scores, economy, strategy, currencyAdvice };
+    const dateLabel = payload.fetchedAt ? new Date(payload.fetchedAt).toLocaleString("fr-FR") : "n/a";
+    dataStatus.textContent = `Data economie OK - ${economy.rowCount} lignes - maj ${dateLabel}`;
+    dataStatus.className = "feedback feedback-success";
+  } catch (error) {
+    economy = buildEconomyIndex(FALLBACK_ECONOMY);
+    dataStatus.textContent = "PoE2DB indisponible: fallback local actif.";
+    dataStatus.className = "feedback feedback-error";
+    console.error(error);
+  }
 }
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
 
-  const data = Object.fromEntries(new FormData(form).entries());
-  const plan = buildPlan(data);
-
-  latestPlan = plan;
-  renderPlan(plan);
-  storeHistory(plan);
-  renderHistory();
-  setFeedback("Plan genere avec integration economie PoE2DB.");
-});
-
-saveFavoriteButton.addEventListener("click", () => {
-  if (!latestPlan) {
-    setFeedback("Genere d'abord un plan pour l'ajouter aux favoris.");
+  const formData = Object.fromEntries(new FormData(form).entries());
+  const desired = String(formData.desiredLines || "").trim();
+  if (!desired) {
+    setFeedback("Ecris d'abord la ligne de craft souhaitee.", true);
     return;
   }
 
-  storeFavorite(latestPlan);
+  if (!economy) {
+    setFeedback("Les donnees economie ne sont pas encore chargees.", true);
+    return;
+  }
+
+  const reco = buildRecommendation(formData);
+  latestRecommendation = reco;
+
+  renderRecommendation(reco);
+  storeHistory(reco);
+  renderHistory();
+  setFeedback("Conseil genere: methode + currencies pretes.");
+});
+
+saveFavoriteButton.addEventListener("click", () => {
+  if (!latestRecommendation) {
+    setFeedback("Genere d'abord un conseil.", true);
+    return;
+  }
+
+  storeFavorite(latestRecommendation);
   renderFavorites();
-  setFeedback("Plan ajoute aux favoris.");
+  setFeedback("Ajoute aux favoris.");
 });
 
 copyPlanButton.addEventListener("click", async () => {
-  if (!latestPlan) {
-    setFeedback("Genere d'abord un plan a copier.");
+  if (!latestRecommendation) {
+    setFeedback("Genere d'abord un conseil a copier.", true);
     return;
   }
 
   try {
-    await navigator.clipboard.writeText(planToText(latestPlan));
-    setFeedback("Plan copie dans le presse-papiers.");
+    await navigator.clipboard.writeText(recommendationToText(latestRecommendation));
+    setFeedback("Conseil copie dans le presse-papiers.");
   } catch {
-    setFeedback("Copie impossible dans ce navigateur.");
+    setFeedback("Copie impossible dans ce navigateur.", true);
   }
 });
 
@@ -621,7 +668,14 @@ document.querySelectorAll(".tab").forEach((button) => {
   });
 });
 
-renderHistory();
-renderFavorites();
-renderGuide();
-setFeedback("Pret. Source eco: PoE2DB snapshot 2026-02-06.");
+async function bootstrap() {
+  submitButton.disabled = true;
+  await loadEconomyData();
+  submitButton.disabled = false;
+  renderHistory();
+  renderFavorites();
+  renderGuide();
+  setFeedback("Pret. Decris ta ligne de craft.");
+}
+
+bootstrap();
