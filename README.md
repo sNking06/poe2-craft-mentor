@@ -4,7 +4,7 @@ Assistant de craft POE2 en local, deploye automatiquement sur GitHub Pages.
 
 ## Objectif
 Guider les joueurs debutants et avances pour:
-- choisir une strategie de craft selon la situation
+- choisir quelle currency utiliser selon la situation
 - prioriser les bons mods
 - estimer risque, cout et valeur du craft
 

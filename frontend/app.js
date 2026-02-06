@@ -302,14 +302,51 @@ function chooseEconomyStrategy(data, economy) {
   };
 }
 
+function buildCurrencyAdvice(data, economy, strategy) {
+  const objectiveBoost = {
+    degats: new Set(["Vaal Orb", "Gemcutter's Prism", "Exalted Orb"]),
+    survie: new Set(["Artificer's Orb", "Regal Orb", "Orb of Annulment"]),
+    resistances: new Set(["Regal Orb", "Orb of Alchemy", "Chaos Orb"]),
+    mobilite: new Set(["Greater Regal Orb", "Regal Orb", "Chaos Orb"])
+  };
+
+  const boosted = objectiveBoost[data.objectif] || new Set();
+
+  const scored = economy.basket.map((item) => {
+    const trendBonus = item.trend7d <= -10 ? 18 : item.trend7d <= -3 ? 10 : item.trend7d >= 10 ? -16 : 0;
+    const liquidityBonus = item.volume24h >= 1000000 ? 12 : item.volume24h >= 250000 ? 6 : -10;
+    const affordabilityBonus = item.chaosCost <= economy.totalChaos * 0.22 ? 9 : -4;
+    const objectiveBonus = boosted.has(item.name) ? 12 : 0;
+    const riskPenalty = data.risque === "safe" && item.name === "Fracturing Orb" ? -40 : 0;
+    const strategyBonus = strategy.decision === "FARM" && item.chaosCost <= economy.totalChaos * 0.12 ? 8 : 0;
+    const score = 50 + trendBonus + liquidityBonus + affordabilityBonus + objectiveBonus + riskPenalty + strategyBonus;
+
+    let reason = "Bon compromis cout/liquidite.";
+    if (item.trend7d <= -10) reason = "Prix en baisse: fenetre d'achat interessante.";
+    if (item.volume24h < 150000) reason = "Liquidite faible: execution plus difficile.";
+    if (boosted.has(item.name)) reason = "Fort impact pour ton objectif de craft.";
+    if (data.risque === "safe" && item.name === "Fracturing Orb") reason = "Trop risquee pour mode safe.";
+
+    return { ...item, score, reason };
+  });
+
+  const sorted = scored.sort((a, b) => b.score - a.score);
+  const recommended = sorted.slice(0, 5);
+  const avoid = sorted.filter((c) => c.score < 45).slice(0, 3);
+  return { recommended, avoid };
+}
+
 function planToText(plan) {
   const header = `Plan Craft - ${formatTitle(plan.data)} (${new Date().toLocaleString("fr-FR")})`;
   const priorities = plan.priorities.map((m, i) => `P${i + 1}: ${m}`).join("\n");
   const checklist = plan.checklist.map((c) => `- ${c}`).join("\n");
   const steps = plan.steps.map((s) => `- ${s}`).join("\n");
   const eco = `Cout estime: ${plan.economy.totalChaos.toFixed(1)} chaos (${plan.economy.totalDiv.toFixed(2)} div) | Segment: ${plan.economy.segment} | Decision: ${plan.strategy.decision}`;
+  const currencies = plan.currencyAdvice.recommended
+    .map((c, i) => `${i + 1}. ${c.name} (${Math.round(c.score)}/100) - ${c.reason}`)
+    .join("\n");
 
-  return `${header}\n\n${eco}\n\nChecklist:\n${checklist}\n\nPriorites:\n${priorities}\n\nPlan:\n${steps}`;
+  return `${header}\n\n${eco}\n\nCurrencies recommandees:\n${currencies}\n\nChecklist:\n${checklist}\n\nPriorites:\n${priorities}\n\nPlan:\n${steps}`;
 }
 
 function renderPlan(plan) {
@@ -328,6 +365,12 @@ function renderPlan(plan) {
   const expensiveText = plan.economy.expensiveNow.length ? plan.economy.expensiveNow.join(", ") : "Aucun signal fort";
   const liquidityText = plan.economy.lowLiquidity.length ? plan.economy.lowLiquidity.join(", ") : "Liquidite correcte";
   const ratioText = `${plan.strategy.affordability.toFixed(2)}x`;
+  const recoRows = plan.currencyAdvice.recommended
+    .map((item, idx) => `<li>#${idx + 1} ${item.name} - score ${Math.round(item.score)}/100 - ${item.reason} (~${item.chaosCost.toFixed(1)} chaos)</li>`)
+    .join("");
+  const avoidRows = plan.currencyAdvice.avoid.length
+    ? plan.currencyAdvice.avoid.map((item) => `<li>${item.name} - ${item.reason}</li>`).join("")
+    : "<li>Aucune currency majeure a eviter actuellement.</li>";
 
   resultat.innerHTML = `
     <div class="card">
@@ -350,6 +393,13 @@ function renderPlan(plan) {
       <p><strong>Couverture budget / cout:</strong> ${ratioText}</p>
       <p><strong>Allocation budget:</strong> achat matieres ${plan.strategy.planBudget.acquisition} div, craft ${plan.strategy.planBudget.crafting} div, reserve ${plan.strategy.planBudget.reserve} div</p>
       <p>${plan.strategy.notes}</p>
+    </div>
+    <div class="card">
+      <h3>Quelles currencies utiliser</h3>
+      <p>Classement prioritaire pour ce craft:</p>
+      <ul>${recoRows}</ul>
+      <p><strong>A eviter pour l'instant:</strong></p>
+      <ul>${avoidRows}</ul>
     </div>
     <div class="card">
       <h3>Analyse economie (${plan.economy.source.provider} ${plan.economy.source.realm})</h3>
@@ -446,8 +496,9 @@ function buildPlan(data) {
   const economy = buildEconomyInsight(data);
   const strategy = chooseEconomyStrategy(data, economy);
   const steps = buildSteps(data, strategy);
+  const currencyAdvice = buildCurrencyAdvice(data, economy, strategy);
 
-  return { data, priorities, checklist, steps, scores, economy, strategy };
+  return { data, priorities, checklist, steps, scores, economy, strategy, currencyAdvice };
 }
 
 form.addEventListener("submit", (event) => {
